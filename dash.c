@@ -2,6 +2,12 @@
 #include <string.h>
 #include <stdbool.h>
 
+// Forward declaration of functions
+char* convertToArray(char *input);
+void execute_command();
+bool isRedirecting();
+void redirect(char *filename);
+
 /**
  * Dash program
  */
@@ -20,6 +26,7 @@ int main() {
 
         // Convert to array of arguments
         *arguments = convertToArray(input);
+        printf("First argument: %s + %s\n", arguments[0], arguments[1]);
 
         // Check if input equals exit
         if (strcmp(input, "exit") == 0) {
@@ -44,7 +51,17 @@ int main() {
  */
 char* convertToArray(char *input) {
     char *arguments[10];
-    char *name = strtok(input, " ");
+
+    // Split by space using a loop
+    // FIXME: Strtok not working properly
+    arguments[0] = strtok(input, " ");
+    arguments[1] = strtok(NULL, " ");
+    // int i = 1;
+    // while ((arguments[i] = strtok(NULL, " "))) {
+    //     i++;
+    // }
+
+    return *arguments;
 }
 
 /**

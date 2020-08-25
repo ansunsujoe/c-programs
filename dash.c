@@ -3,7 +3,7 @@
 #include <stdbool.h>
 
 // Forward declaration of functions
-char* convertToArray(char *input);
+void convertToArray(char input[], char *array);
 void execute_command();
 bool isRedirecting();
 void redirect(char *filename);
@@ -23,10 +23,15 @@ int main() {
 
         // Get the input using getline
         getline(&input, &input_size, stdin);
-
+        arguments[0] = strtok(input, " ");
+        
         // Convert to array of arguments
-        *arguments = convertToArray(input);
-        printf("First argument: %s + %s\n", arguments[0], arguments[1]);
+        int i = 1;
+        while (arguments[i-1] != NULL) {
+            printf("Argument %d is %s\n", i - 1, arguments[i-1]);
+            arguments[i] = strtok(NULL, " ");
+            i++;
+        }
 
         // Check if input equals exit
         if (strcmp(input, "exit") == 0) {
@@ -44,24 +49,6 @@ int main() {
             printf("Command %s is not recognized\n", input);
         }
     }
-}
-
-/**
- * Convert the string we received into an array of arguments
- */
-char* convertToArray(char *input) {
-    char *arguments[10];
-
-    // Split by space using a loop
-    // FIXME: Strtok not working properly
-    arguments[0] = strtok(input, " ");
-    arguments[1] = strtok(NULL, " ");
-    // int i = 1;
-    // while ((arguments[i] = strtok(NULL, " "))) {
-    //     i++;
-    // }
-
-    return *arguments;
 }
 
 /**

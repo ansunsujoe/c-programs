@@ -4,9 +4,13 @@
 
 // Forward declaration of functions
 void convertToArray(char input[], char *array);
-void execute_command();
+
+void execute_command(char *args[]);
+void execute_command_substring(char *args[], int startIndex, int endIndex);
+
 bool isRedirecting();
 void redirect(char *filename);
+
 
 /**
  * Dash program
@@ -33,6 +37,9 @@ int main() {
             i++;
         }
 
+        // Execute the command
+        execute_command(arguments);
+
         // Check if input equals exit
         if (strcmp(input, "exit") == 0) {
             printf("Exiting now...\n");
@@ -54,8 +61,27 @@ int main() {
 /**
  * Executes a command using execv and fork
  */
-void execute_command() {
+void execute_command(char *args[]) {
+    // Dummy function - just for testing
+    printf("Executing command %s...\n", args[0]);
+}
 
+/**
+ * Executes a command using a substring of arguments
+ * This is needed for redirection and parallel commands.
+ */
+void execute_command_substring(char *args[], int startIndex, int endIndex) {
+
+    // Create a new array with only the args we want
+    char *shortenedArgs[endIndex - startIndex + 1];
+
+    // Fill up the array
+    for (int i = startIndex; i < endIndex; i++) {
+        shortenedArgs[i - startIndex] = args[i];
+    }
+
+    // Execute based on the new arguments array
+    execute_command(shortenedArgs);
 }
 
 /**

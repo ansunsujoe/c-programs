@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 // Forward declaration of functions
 void convertToArray(char input[], char *array);
@@ -8,7 +9,7 @@ void convertToArray(char input[], char *array);
 void execute_command(char *args[]);
 void execute_command_substring(char *args[], int startIndex, int endIndex);
 
-bool isRedirecting();
+bool isRedirecting(char *args[]);
 void redirect(char *filename);
 
 
@@ -87,8 +88,19 @@ void execute_command_substring(char *args[], int startIndex, int endIndex) {
 /**
  * Identifies if an array of characters contains redirection
  */
-bool isRedirecting() {
-    return true;
+bool isRedirecting(char *args[]) {
+    int arrayLen = strlen(*args) - 1;
+    
+    // Redirection symbol should be second to last in the array
+    if (arrayLen > 2) {
+    	if (strcmp(args[arrayLen - 2], ">") == 0) {
+    		return true;
+    	}
+    	else {
+			return false;    	
+    	}
+    }
+    return false;
 }
 
 /**

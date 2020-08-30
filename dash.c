@@ -9,8 +9,10 @@ void convertToArray(char input[], char *array);
 void execute_command(char *args[]);
 void execute_command_substring(char *args[], int startIndex, int endIndex);
 
-bool isRedirecting(char *args[]);
-void redirect(char *filename);
+bool isRedirecting(char *args[], int startIndex, int endIndex);
+void redirect(char *args[]);
+
+int* findParallelSplits(char *args[])
 
 
 /**
@@ -37,9 +39,12 @@ int main() {
             arguments[i] = strtok(NULL, " ");
             i++;
         }
+        
+        // Find the array length
+        int argsLength = strlen(*arguments) + 1;
 
         // Execute the command
-        execute_command(arguments);
+        execute_command_substring(arguments, 0, argsLength);
 
         // Check if input equals exit
         if (strcmp(input, "exit") == 0) {
@@ -63,7 +68,7 @@ int main() {
  * Executes a command using execv and fork
  */
 void execute_command(char *args[]) {
-    // Dummy function - just for testing
+    // Dummy function - needs to be filled in with exec and fork stuff
     printf("Executing command %s...\n", args[0]);
 }
 
@@ -80,16 +85,17 @@ void execute_command_substring(char *args[], int startIndex, int endIndex) {
     for (int i = startIndex; i < endIndex; i++) {
         shortenedArgs[i - startIndex] = args[i];
     }
-
+    
     // Execute based on the new arguments array
     execute_command(shortenedArgs);
+    
 }
 
 /**
  * Identifies if an array of characters contains redirection
  */
-bool isRedirecting(char *args[]) {
-    int arrayLen = strlen(*args) - 1;
+bool isRedirecting(char *args[], int startIndex, int endIndex) {
+    int arrayLen = strlen(*args) + 1;
     
     // Redirection symbol should be second to last in the array
     if (arrayLen > 2) {
@@ -106,6 +112,13 @@ bool isRedirecting(char *args[]) {
 /**
  * Perform the redirect to a file
  */
-void redirect(char *filename) {
+void redirect(char *args[]) {
+	
+}
 
+/**
+ * Find where to split parallel commands (&)
+ */
+int* findParallelSplits(char *args[]) {
+	
 }

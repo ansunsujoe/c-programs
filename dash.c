@@ -40,24 +40,36 @@ int main() {
         }
         
         // Find the array length
-        int argsLength = strlen(*arguments);
+        int argsLength = i - 1;
         
         // Find where to split parallel commands (&)
         int parallelSplits[10];
 		int splitCount = 0;
 	
 		// Iterate through arguments in search of &
-		for (int j = 0; j < argsLength; j++) {
-			if (strcmp(arguments[j], "*") == 0) {
+		for (i = 0; i < argsLength; i++) {
+			if (strcmp(arguments[i], "&") == 0) {
 		
 				// Add the index of the split to the list
-				parallelSplits[splitCount] = j;
+				parallelSplits[splitCount] = i;
 				splitCount++;
 			}
+			
 		}
-
-        // Execute the command(s)
-        execute_command_substring(arguments, 0, argsLength);
+		
+		// Add the last index of the split
+		parallelSplits[splitCount] = argsLength;
+		splitCount++;
+		
+		// Begin execution
+		int startExec = 0;
+		for (i = 0; i < splitCount; i++) {
+		
+			// Here is where we will need to check for redirection
+			// Also where to do the FORK
+			execute_command_substring(arguments, startExec, parallelSplits[i]);
+			startExec = parallelSplits[i] + 1;
+		}     
 
     }
 }
@@ -91,6 +103,7 @@ void execute_command_substring(char *args[], int startIndex, int endIndex) {
 
 /**
  * Identifies if an array of characters contains redirection
+ * FUNCTION NEEDS TO BE FIXED FOR STARTING/ENDING INDEX
  */
 bool isRedirecting(char *args[], int startIndex, int endIndex) {
 	

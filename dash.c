@@ -18,7 +18,25 @@ void redirect(char *args[]);
  * Dash program
  */
 
-int main() {
+int main(int argc, char *argv[]) {
+	
+	// Start out by checking if we are running in batch mode or interactive
+	// Invalid if there are two arguments or more with ./dash
+    if (argc > 2) {
+        fprintf(stderr, "Too many arguments\n");
+        exit(1);
+    }
+    
+    // Batch mode if there is one argument
+    else if (argc == 2) {
+    	printf("Running in batch mode\n");
+    }
+    
+    // Interactive mode if there are 0 arguments
+    else {
+    	printf("Running in interactive mode\n");
+    }
+
     // Variables for reading the command
     char *input;
     size_t input_size = 100;

@@ -20,6 +20,9 @@ void redirect(char *args[]);
 
 int main(int argc, char *argv[]) {
 	
+	// Control value for batch mode selection
+	bool batchMode = false;
+	
 	// Start out by checking if we are running in batch mode or interactive
 	// Invalid if there are two arguments or more with ./dash
     if (argc > 2) {
@@ -29,7 +32,22 @@ int main(int argc, char *argv[]) {
     
     // Batch mode if there is one argument
     else if (argc == 2) {
+    
+    	// Set to batch mode
     	printf("Running in batch mode\n");
+    	batchMode = true;
+    	
+    	// Open the file for reading
+    	FILE *fp = fopen(argv[1], "r");
+    	
+    	// Check if file exists
+    	if (!fp) {
+    		fprintf(stderr, "File %s does not exist!\n", argv[1]);
+    		exit(1);
+    	}
+    	else {
+    		printf("Reading from file %s...\n", argv[1]);
+    	}
     }
     
     // Interactive mode if there are 0 arguments
@@ -116,7 +134,7 @@ void execute_command_substring(char *args[], int startIndex, int endIndex) {
     
     // Execute based on the new arguments array
     execute_command(shortenedArgs);
-    
+
 }
 
 /**

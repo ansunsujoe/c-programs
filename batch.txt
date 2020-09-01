@@ -1,0 +1,3 @@
+ls
+ls -l & grep "take me out"
+find -name "f"

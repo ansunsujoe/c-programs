@@ -10,7 +10,6 @@
 // Forward declaration of functions
 bool execute_command_substring(char *args[], char *possiblePaths[], int startIndex, int endIndex);
 bool isRedirecting(char *args[], int startIndex, int endIndex);
-void redirect(char *args[]);
 
 /**
  * Dash program
@@ -46,8 +45,9 @@ int main(int argc, char *argv[]) {
     // Variables for forking and waiting
     int rc;
     int status;
-    pid_t pid;
+    int pid;
     int numForkedProcesses = 0;
+	int pids[10];
     
     // Error message
     char error_message[30] = "An error has occurred\n";
@@ -123,6 +123,12 @@ int main(int argc, char *argv[]) {
         }
 
         arguments[0] = strtok(input, " ");
+
+		// Make sure there actually is input (this will catch empty string)
+		if (arguments[0] == NULL) {
+			write(STDERR_FILENO, error_message, strlen(error_message));
+			continue;
+		}
         
         // Convert to array of arguments
         i = 1;
@@ -218,15 +224,15 @@ int main(int argc, char *argv[]) {
 				numForkedProcesses++;
 			
 				// Fork another process
-				rc = fork();
+				pids[numForkedProcesses - 1] = fork();
 
 				// Fork failed
-				if (rc < 0) {
+				if (pids[numForkedProcesses - 1] < 0) {
 					fprintf(stderr, "Fork failed\n");
 					exit(1);
 				}
 				// This is the child and the exec happens here
-				else if (rc == 0) {
+				else if (pids[numForkedProcesses - 1] == 0) {
 
 					// Check for redirection
 					if (isRedirecting(arguments, startExec, parallelSplits[i])) {
@@ -268,6 +274,10 @@ int main(int argc, char *argv[]) {
 	                }
 					
 				}
+
+				else {
+					printf("PID of the Child: %d\n", pids[numForkedProcesses - 1]);
+				}
 				
 				// Anticipate the next instruction
 				startExec = parallelSplits[i] + 1;
@@ -277,7 +287,7 @@ int main(int argc, char *argv[]) {
         
         // Wait until the child processes have finished
         for (i = 0; i < numForkedProcesses; i++) {
-            pid = wait(&status);
+            pid = waitpid(pids[i], &status, 0);
             printf("Child with PID %d exited with status %d\n", (int) pid, status);
         }
 
@@ -351,11 +361,4 @@ bool isRedirecting(char *args[], int startIndex, int endIndex) {
         }
     }
     return false;
-}
-
-/**
- * Perform the redirect to a file
- */
-void redirect(char *args[]) {
-	
 }

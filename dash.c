@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
     int argsLength;
 
     // Dealing with parallel commands
-    int parallelSplits[10];
+    int parallelSplits[5000];
     int splitCount;
     
     // Dealing with redirection
@@ -47,13 +47,13 @@ int main(int argc, char *argv[]) {
     int status;
     int pid;
     int numForkedProcesses = 0;
-	int pids[10];
+	int pids[5000];
     
     // Error message
     char error_message[30] = "An error has occurred\n";
     
     // Path variable(s)
-    char *possiblePaths[10];
+    char *possiblePaths[20];
     possiblePaths[0] = "/bin";
     possiblePaths[1] = NULL;
 	
@@ -91,8 +91,8 @@ int main(int argc, char *argv[]) {
 
     // Variables for reading the command
     char *input = NULL;
-    size_t input_size = 100;
-    char *arguments[20];
+    size_t input_size = 500000;
+    char *arguments[5000];
 
     while (1) {
     
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
 				printf("Executing path and size is %lu\n", sizeof(possiblePaths));
 				
 				// Empty the possible paths array
-				for (pathIter = 0; pathIter < 10; pathIter++) {
+				for (pathIter = 0; pathIter < 5000; pathIter++) {
 					possiblePaths[pathIter] = NULL;
 				}
 				
@@ -234,8 +234,12 @@ int main(int argc, char *argv[]) {
 				// This is the child and the exec happens here
 				else if (pids[numForkedProcesses - 1] == 0) {
 
+					printf("Parallel splits i is %d\n", parallelSplits[i]);
+					
 					// Check for redirection
 					if (isRedirecting(arguments, startExec, parallelSplits[i])) {
+
+						printf("Hello. THis is the start\n");
 
 						// Find the name of the file to redirect to
 					    redirectFilename = arguments[parallelSplits[i] - 1];
@@ -272,11 +276,9 @@ int main(int argc, char *argv[]) {
 							write(STDERR_FILENO, error_message, strlen(error_message));
 						}
 	                }
-					
-				}
 
-				else {
-					printf("PID of the Child: %d\n", pids[numForkedProcesses - 1]);
+					exit(0);
+					
 				}
 				
 				// Anticipate the next instruction
@@ -352,8 +354,8 @@ bool isRedirecting(char *args[], int startIndex, int endIndex) {
     int arrayLen = strlen(*args) + 1;
     
     // Redirection symbol should be second to last in the array
-    if (arrayLen > 2) {
-    	if (strcmp(args[arrayLen - 2], ">") == 0) {
+    if (endIndex - startIndex > 2) {
+    	if (strcmp(args[endIndex - 2], ">") == 0) {
     		return true;
     	}
         else {

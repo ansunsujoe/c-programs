@@ -48,6 +48,7 @@ int main(int argc, char *argv[]) {
     int pid;
     int numForkedProcesses = 0;
 	int pids[5000];
+	bool processError;
     
     // Error message
     char error_message[30] = "An error has occurred\n";
@@ -60,7 +61,7 @@ int main(int argc, char *argv[]) {
 	// Start out by checking if we are running in batch mode or interactive
 	// Invalid if there are two arguments or more with ./dash
     if (argc > 2) {
-        fprintf(stderr, "Too many arguments\n");
+        write(STDERR_FILENO, error_message, strlen(error_message));
         exit(1);
     }
     
@@ -68,7 +69,6 @@ int main(int argc, char *argv[]) {
     else if (argc == 2) {
     
     	// Set to batch mode
-    	printf("Running in batch mode\n");
     	batchMode = true;
     	
     	// Open the file for reading
@@ -76,17 +76,9 @@ int main(int argc, char *argv[]) {
     	
     	// Check if file exists
     	if (!fp) {
-    		fprintf(stderr, "File %s does not exist!\n", argv[1]);
+    		write(STDERR_FILENO, error_message, strlen(error_message));
     		exit(1);
     	}
-    	else {
-    		printf("Reading from file %s...\n", argv[1]);
-    	}
-    }
-    
-    // Interactive mode if there are 0 arguments
-    else {
-    	printf("Running in interactive mode\n");
     }
 
     // Variables for reading the command
@@ -98,6 +90,7 @@ int main(int argc, char *argv[]) {
     
     	// Some initializations
     	numForkedProcesses = 0;
+		processError = false;
 
         // Get the input in batch mode
         if (batchMode) {
@@ -105,7 +98,6 @@ int main(int argc, char *argv[]) {
 
             // Check if there is no more to read
             if (getlineStatus <= 0) {
-                printf("Finished reading from file.\n");
                 exit(0);
             }
         }
@@ -126,14 +118,12 @@ int main(int argc, char *argv[]) {
 
 		// Make sure there actually is input (this will catch empty string)
 		if (arguments[0] == NULL) {
-			write(STDERR_FILENO, error_message, strlen(error_message));
 			continue;
 		}
         
         // Convert to array of arguments
         i = 1;
         while (arguments[i-1] != NULL) {
-            printf("Argument %d is %s\n", i - 1, arguments[i-1]);
             arguments[i] = strtok(NULL, " ");
             i++;
         }
@@ -168,12 +158,10 @@ int main(int argc, char *argv[]) {
 				
 				// Check if there is a correct number of args (only 1)
 				if ((parallelSplits[i] - startExec) == 1) {
-					printf("Exiting\n");
 					exit(0);
 				}
 				else {
 					write(STDERR_FILENO, error_message, strlen(error_message));
-					exit(1);
 				}
 			}
 			
@@ -186,12 +174,10 @@ int main(int argc, char *argv[]) {
 					// Print error if the change of directory cannot be done
 					if (chdir(arguments[startExec + 1]) != 0) {
 						write(STDERR_FILENO, error_message, strlen(error_message));
-						exit(1);
 					}
 				}
 				else {
 					write(STDERR_FILENO, error_message, strlen(error_message));
-					exit(1);
 				}
 				
 				// Anticipate next command
@@ -201,11 +187,9 @@ int main(int argc, char *argv[]) {
 			
 			// BUILT IN COMMAND: Path
 			else if (strcmp(arguments[startExec], "path") == 0) {
-			
-				printf("Executing path and size is %lu\n", sizeof(possiblePaths));
 				
 				// Empty the possible paths array
-				for (pathIter = 0; pathIter < 5000; pathIter++) {
+				for (pathIter = 0; pathIter < 20; pathIter++) {
 					possiblePaths[pathIter] = NULL;
 				}
 				
@@ -228,22 +212,17 @@ int main(int argc, char *argv[]) {
 
 				// Fork failed
 				if (pids[numForkedProcesses - 1] < 0) {
-					fprintf(stderr, "Fork failed\n");
+					write(STDERR_FILENO, error_message, strlen(error_message));
 					exit(1);
 				}
 				// This is the child and the exec happens here
 				else if (pids[numForkedProcesses - 1] == 0) {
-
-					printf("Parallel splits i is %d\n", parallelSplits[i]);
 					
 					// Check for redirection
 					if (isRedirecting(arguments, startExec, parallelSplits[i])) {
 
-						printf("Hello. THis is the start\n");
-
 						// Find the name of the file to redirect to
 					    redirectFilename = arguments[parallelSplits[i] - 1];
-	                    printf("Writing to file %s...\n", redirectFilename);
 
 						// Open that file
 	                    redirectOut = open(redirectFilename, O_CREAT|O_WRONLY|O_TRUNC, S_IRWXU);
@@ -290,10 +269,13 @@ int main(int argc, char *argv[]) {
         // Wait until the child processes have finished
         for (i = 0; i < numForkedProcesses; i++) {
             pid = waitpid(pids[i], &status, 0);
-            printf("Child with PID %d exited with status %d\n", (int) pid, status);
-        }
 
-        printf("------------------\n");
+			// Error if status is not 0
+			if (status != 0 && processError == false) {
+				processError = true;
+				write(STDERR_FILENO, error_message, strlen(error_message));
+			}
+        }
     }
 }
 
@@ -329,13 +311,9 @@ bool execute_command_substring(char *args[], char *possiblePaths[], int startInd
     	if (access(currentPath, X_OK) != -1) {
     	
     		// Execute based on the new arguments array
-    		printf("Executing command %s <-> %s...\n", shortenedArgs[0], shortenedArgs[endIndex-startIndex-1]);
     		execv(currentPath, shortenedArgs);
     		execFound = true;
     		break;
-    	}
-    	else {
-    		printf("Couldn't find %s\n", currentPath);
     	}
     }
     

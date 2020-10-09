@@ -5,6 +5,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 
 // Forward declaration of functions
@@ -43,9 +45,7 @@ int main(int argc, char *argv[]) {
     int pathIter;
 
     // Variables for forking and waiting
-    int rc;
     int status;
-    int pid;
     int numForkedProcesses = 0;
 	int pids[5000];
 	bool processError;
@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
         
         // Wait until the child processes have finished
         for (i = 0; i < numForkedProcesses; i++) {
-            pid = waitpid(pids[i], &status, 0);
+            waitpid(pids[i], &status, 0);
 
 			// Error if status is not 0
 			if (status != 0 && processError == false) {
@@ -328,9 +328,6 @@ bool execute_command_substring(char *args[], char *possiblePaths[], int startInd
  */
 bool isRedirecting(char *args[], int startIndex, int endIndex) {
 	
-	// Finding the length of the array
-    int arrayLen = strlen(*args) + 1;
-    
     // Redirection symbol should be second to last in the array
     if (endIndex - startIndex > 2) {
     	if (strcmp(args[endIndex - 2], ">") == 0) {

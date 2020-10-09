@@ -1,0 +1,236 @@
+TEST 0 - clean build (program should compile without errors or warnings)
+RESULT passed
+
+TEST 1 - Input to check bad cd. No arguments are passed to cd.
+RESULT passed
+
+TEST 2 - 2 arguments are passed to cd.
+RESULT passed
+
+TEST 3 - ls with a bad directory name.
+RESULT failed
+standard error does not match expected
+expected: [ls: cannot access /u/c/s/cs537-1/tests/tests-wish/bad_ls/bad: No such file or directory
+]
+got:      [ls: cannot access /u/c/s/cs537-1/tests/tests-wish/bad_ls/bad: No such file or directory
+An error has occurred
+]
+
+
+TEST 4 - Input to run misc. commands.
+RESULT passed
+
+TEST 5 - Tries to exit with an argument. Should throw an error.
+RESULT passed
+
+TEST 6 - Try running a shell script without setting path.
+RESULT passed
+
+TEST 7 - Set path, run a shell script. Overwrite path and then try running the script again.
+test1
+RESULT failed
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+]
+got:      []
+
+standard error does not match expected
+expected: [An error has occurred
+An error has occurred
+]
+got:      [An error has occurred
+An error has occurred
+An error has occurred
+]
+
+
+TEST 8 - Redirection with no output file specified.
+RESULT failed
+standard error does not match expected
+expected: [An error has occurred
+]
+got:      [ls: cannot access >: No such file or directory
+An error has occurred
+]
+
+
+TEST 9 - Redirection with multiple output files.
+RESULT failed
+standard error does not match expected
+expected: [An error has occurred
+]
+got:      [ls: cannot access >: No such file or directory
+ls: cannot access output.9: No such file or directory
+An error has occurred
+]
+
+
+TEST 10 - Redirection with multiple '>'
+RESULT failed
+standard error does not match expected
+expected: [An error has occurred
+]
+got:      [ls: cannot access >: No such file or directory
+ls: cannot access output.9: No such file or directory
+An error has occurred
+]
+
+
+TEST 11 - Normal redirection.
+test1
+RESULT failed
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+]
+got:      [/cs4348-xv6/ta/all_tests/p1a/tests-wish_18f/p2a-test>output11
+]
+
+standard error does not match expected
+expected: []
+got:      [cat: output11: No such file or directory
+An error has occurred
+]
+
+
+TEST 12 - Input to check bad redirection. Contains no command before '>'.
+RESULT passed
+
+TEST 13 - Input file is valid and empty. But shell is invoked in batch mode with 2 files (with same file 13.in used twice)
+RESULT passed
+
+TEST 14 - Shell is invoked with a bad batch file.
+RESULT passed
+
+TEST 15 - Tests command with variable whitespace.
+RESULT passed
+
+TEST 16 - Command only contains &
+RESULT failed
+return code does not match expected
+expected: [0]
+got:      [-11]
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+]
+
+
+TEST 17 - Parallel command contains & at the end
+RESULT failed
+return code does not match expected
+expected: [0]
+got:      [-11]
+
+test1
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+/cs4348-xv6/ta/all_tests/p1a/tests-wish_18f/p2a-test
+]
+got:      []
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+An error has occurred
+]
+
+
+TEST 18 - Basic test of running parallel commands.
+test1
+RESULT failed
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+/cs4348-xv6/ta/all_tests/p1a/tests-wish_18f/p2a-test
+Linux
+]
+got:      []
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+An error has occurred
+An error has occurred
+]
+
+
+TEST 19 - Parallel commands with no space between command and '&'
+test1
+RESULT failed
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+/cs4348-xv6/ta/all_tests/p1a/tests-wish_18f/p2a-test
+Linux
+]
+got:      []
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+]
+
+
+TEST 20 - Redirection and Parallel commands combined
+test1
+RESULT failed
+standard output does not match expected
+expected: [test1
+test2
+test3
+test4
+/cs4348-xv6/ta/all_tests/p1a/tests-wish_18f/p2a-test
+Linux
+]
+got:      []
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+]
+
+
+TEST 21 - Empty commands
+RESULT passed
+
+TEST 22 - Test to check that commands are not executed serially
+Linux
+RESULT failed
+standard output does not match expected
+expected: [Linux
+]
+got:      []
+
+standard error does not match expected
+expected: []
+got:      [An error has occurred
+An error has occurred
+An error has occurred
+An error has occurred
+]
+
+
+Total tested cases number: 22
+Total passed cases number: 10

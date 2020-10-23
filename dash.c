@@ -11,7 +11,7 @@
 
 // Forward declaration of functions
 bool execute_command_substring(char *args[], char *possiblePaths[], int startIndex, int endIndex);
-bool isRedirecting(char *args[], int startIndex, int endIndex);
+int isRedirecting(char *args[], int startIndex, int endIndex);
 
 /**
  * Dash program
@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
     int redirectOut;
     char* redirectFilename;
     int saveOut;
+	int redirectStatus;
 
     // Iterators
     int i;
@@ -153,6 +154,12 @@ int main(int argc, char *argv[]) {
 		startExec = 0;
 		for (i = 0; i < splitCount; i++) {
 			
+			// // Check if the command is empty (only the & sign)
+			if (startExec == parallelSplits[i]) {
+				startExec = parallelSplits[i] + 1;
+				continue;
+			}
+			
 			// BUILT IN COMMAND: Exit
 			if (strcmp(arguments[startExec], "exit") == 0) {
 				
@@ -204,6 +211,7 @@ int main(int argc, char *argv[]) {
 			}
 			
 			else {
+
 				// Increase the forked processes tally
 				numForkedProcesses++;
 			
@@ -215,11 +223,20 @@ int main(int argc, char *argv[]) {
 					write(STDERR_FILENO, error_message, strlen(error_message));
 					exit(1);
 				}
+				
 				// This is the child and the exec happens here
 				else if (pids[numForkedProcesses - 1] == 0) {
 					
+					redirectStatus = isRedirecting(arguments, startExec, parallelSplits[i]);
+					
+					// If there is a > in the wrong place
+					if (redirectStatus < 0) {
+						write(STDERR_FILENO, error_message, strlen(error_message));
+						exit(1);
+					}
+
 					// Check for redirection
-					if (isRedirecting(arguments, startExec, parallelSplits[i])) {
+					else if (redirectStatus == 0) {
 
 						// Find the name of the file to redirect to
 					    redirectFilename = arguments[parallelSplits[i] - 1];
@@ -231,11 +248,13 @@ int main(int argc, char *argv[]) {
 	                    // Redirect output to that file or error
 	                    if (dup2(redirectOut, fileno(stdout)) == -1) {
 	                    	write(STDERR_FILENO, error_message, strlen(error_message));
+							exit(1);
 	                    }
 	                    
 	                    // Execute the rest of the command
 	                    if (execute_command_substring(arguments, possiblePaths, startExec, parallelSplits[i] - 2) == false) {
 							write(STDERR_FILENO, error_message, strlen(error_message));
+							exit(1);
 						}
 						
 						// Make sure everything in the execution is printed to the file
@@ -253,6 +272,7 @@ int main(int argc, char *argv[]) {
 	                	// Execute the command or return an error if the executable file cannot be found
 						if (execute_command_substring(arguments, possiblePaths, startExec, parallelSplits[i]) == false) {
 							write(STDERR_FILENO, error_message, strlen(error_message));
+							exit(1);
 						}
 	                }
 
@@ -273,7 +293,7 @@ int main(int argc, char *argv[]) {
 			// Error if status is not 0
 			if (status != 0 && processError == false) {
 				processError = true;
-				write(STDERR_FILENO, error_message, strlen(error_message));
+				// write(STDERR_FILENO, error_message, strlen(error_message));
 			}
         }
     }
@@ -286,7 +306,7 @@ int main(int argc, char *argv[]) {
  */
 bool execute_command_substring(char *args[], char *possiblePaths[], int startIndex, int endIndex) {
 
-	// Identify whether the executable is found
+	// Identify whether the executable is found or the execution went correctly
 	bool execFound = false;
 
 	// Identify the path
@@ -311,8 +331,8 @@ bool execute_command_substring(char *args[], char *possiblePaths[], int startInd
     	if (access(currentPath, X_OK) != -1) {
     	
     		// Execute based on the new arguments array
+			execFound = true;
     		execv(currentPath, shortenedArgs);
-    		execFound = true;
     		break;
     	}
     }
@@ -326,16 +346,26 @@ bool execute_command_substring(char *args[], char *possiblePaths[], int startInd
  * Identifies if an array of characters contains redirection
  * FUNCTION NEEDS TO BE FIXED FOR STARTING/ENDING INDEX
  */
-bool isRedirecting(char *args[], int startIndex, int endIndex) {
-	
+int isRedirecting(char *args[], int startIndex, int endIndex) {
+
+	// If we find the redirection operator anywhere else, it's an error (negative number)
+	int i;
+	for (i = startIndex; i < endIndex; i++) {
+		if ((strstr(args[i], ">") != NULL) && (strcmp(args[i], ">") != 0)) {
+			return -1;
+		}
+		if ((strcmp(args[i], ">") == 0) && (i != endIndex - 2)) {
+			return -1;
+		}
+	}
+
     // Redirection symbol should be second to last in the array
     if (endIndex - startIndex > 2) {
     	if (strcmp(args[endIndex - 2], ">") == 0) {
-    		return true;
+    		return 0;
     	}
-        else {
-            return false;
-        }
     }
-    return false;
+
+	// No redirection operator has been found in the statement
+	return 1;
 }

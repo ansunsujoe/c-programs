@@ -121,7 +121,7 @@ expected: []
 got:      [An error has occurred
 ]
 
-
+`
 TEST 17 - Parallel command contains & at the end
 RESULT failed
 return code does not match expected

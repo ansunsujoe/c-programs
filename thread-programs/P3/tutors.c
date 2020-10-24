@@ -8,8 +8,19 @@ struct {
     int priority;
 } person;
 
-struct person waitingRoom[];
-struct person tutoringRoom[];
+struct {
+    struct person;
+    struct node* next;
+} node;
+
+struct {
+    struct node* head;
+    int length;
+} waitingRoom;
+
+int queueInWaitingRoom() {
+    
+}
 
 // Global variables for output
 int numEmptyChairs;
@@ -28,5 +39,9 @@ void tutor() {
 }
 
 void student() {
+
+}
+
+void coordinator() {
 
 }

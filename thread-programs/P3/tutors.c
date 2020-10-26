@@ -4,10 +4,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-static int numStudents = 1;
+static int numStudents = 4;
 static int numTutors = 1;
 static int chairs = 10;
 static int helps = 1;
+
+static int programmingTime = 2000;
+static int tutoringTime = 10;
 
 struct person {
     int id;
@@ -103,6 +106,11 @@ int queueInWaitingRoom(struct LinkedList *waitingRoom, struct person *student) {
     return 0;
 }
 
+void registerStudent(struct person* student, int id, int priority) {
+    student->id = id;
+    student->priority = priority;
+}
+
 // Global variables for output
 int numEmptyChairs;
 int numStudentsWaiting;
@@ -110,38 +118,59 @@ int notifications;
 int studentsCurrentlyHelped;
 int tutoringSessionsCompleted;
 
-int main() {
-    struct LinkedList *waitingRoom = malloc(sizeof(struct LinkedList));
-    waitingRoom->length = 0;
-    struct person *student1 = malloc(sizeof(struct person));
-    struct person *student2 = malloc(sizeof(struct person));
-    struct person *student3 = malloc(sizeof(struct person));
-    struct person *student4 = malloc(sizeof(struct person));
-    student1->id = 521;
-    student2->id = 632;
-    student3->id = 400;
-    student4->id = 753;
-    student1->priority = 3;
-    student2->priority = 4;
-    student3->priority = 1;
-    student4->priority = 9;
-    insert(waitingRoom, student1);
-    insert(waitingRoom, student2);
-    insert(waitingRoom, student3);
-    insert(waitingRoom, student4);
-    dequeue(waitingRoom);
-    printWaitingRoom(waitingRoom);
-    return 0;
-}
+// Semaphores
+sem_t queuedInWaiting;
+sem_t tutorReady;
 
-void tutor() {
+void tutor(int id) {
 
 }
 
-void student() {
+void student(int id) {
+    // Iterate for helps needed
+    int i;
+    for (i = 0; i < helps; i++) {
+        // Program
+        usleep(programmingTime);
 
+        // Alert the coordinator so the coordinator will get you in
+        sem_wait(&queuedInWaiting);
+
+        // Now you are in front of the line. A tutor will wake you next
+        sem_wait(&tutorReady);
+
+        // Simulate tutoring time
+        usleep(tutoringTime);
+    }
 }
 
 void coordinator() {
+    
+}
 
+int main() {
+    struct LinkedList *waitingRoom = malloc(sizeof(struct LinkedList));
+    struct person* registry[numStudents];
+    waitingRoom->length = 0;
+
+    // Initialize (register) students
+    int i;
+    for (i = 0; i < numStudents; i++) {
+        registry[i] =  malloc(sizeof(struct person));
+        registerStudent(registry[i], i + 3001, helps);
+    }
+
+    for (i = 0; i < numStudents; i++) {
+        insert(waitingRoom, registry[i]);
+    }
+
+    dequeue(waitingRoom);
+    printWaitingRoom(waitingRoom);
+
+    // Clean up student records
+    for (i = 0; i < numStudents; i++) {
+        free(registry[i]);
+    }
+
+    return 0;
 }

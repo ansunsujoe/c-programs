@@ -15,6 +15,7 @@ static int tutoringTime = 10;
 struct person {
     int id;
     int priority;
+    sem_t tutorSem;
 };
 
 struct node {
@@ -24,7 +25,6 @@ struct node {
 
 struct LinkedList {
     struct node* head;
-    int length;
 };
 
 /**
@@ -36,9 +36,6 @@ void insert(struct LinkedList *waitingRoom, struct person *student) {
     struct node *cur = waitingRoom->head;
     struct node *newNode = malloc(sizeof(struct node));
     newNode->student = student;
-
-    // Increase the length of the list
-    waitingRoom->length++;
 
     // If list is empty, then insert at head
     if (cur == NULL) {
@@ -94,21 +91,14 @@ void printWaitingRoom(struct LinkedList *waitingRoom) {
  */
 int queueInWaitingRoom(struct LinkedList *waitingRoom, struct person *student) {
 
-    // The student will have to go back to programming and come back
-    // another time
-    if (waitingRoom->length >= chairs) {
-        return -1;
-    }
-    // Priority queue insert
-    else {
-        insert(waitingRoom, student);
-    }
+    insert(waitingRoom, student);
     return 0;
 }
 
 void registerStudent(struct person* student, int id, int priority) {
     student->id = id;
     student->priority = priority;
+    sem_init(student->tutorSem, 0, 0);
 }
 
 // Global variables for output
@@ -119,11 +109,20 @@ int studentsCurrentlyHelped;
 int tutoringSessionsCompleted;
 
 // Semaphores
-sem_t queuedInWaiting;
-sem_t tutorReady;
+sem_t waitingRoomMutex;
+sem_t queueWaitingStudent;
+sem_t tutorWaitingStudents;
+
+struct LinkedList *waitingRoom;
 
 void tutor(int id) {
+    // Wait for coordinator signal
 
+    // Get student from queue
+
+    // Signal student
+
+    // Wait for student to be done
 }
 
 void student(int id) {
@@ -133,39 +132,62 @@ void student(int id) {
         // Program
         usleep(programmingTime);
 
-        // Alert the coordinator so the coordinator will get you in
-        sem_wait(&queuedInWaiting);
+        // Enter the waiting room
+        // While there is no empty chair then go back to programming
+        while (numEmptyChairs == 0) {
+            usleep(programmingTime);
+        }
 
-        // Now you are in front of the line. A tutor will wake you next
-        sem_wait(&tutorReady);
+        // Sit down and increment the number of chairs
+        sem_wait(&waitingRoomMutex);
+        numEmptyChairs--;
+        sem_post(&waitingRoomMutex);
 
-        // Simulate tutoring time
+        // Signal the coordinator
+        sem_post(queueWaitingStudent);
+
+        // Wait for tutor
+        sem_wait(tutorWaitingStudents);
+
+        // Get tutored
         usleep(tutoringTime);
+
+        // Signal tutor that it's over
+        // sem_post(registry);
+
+        // Decrement the number of helps
+
+        // Terminate thread if the number of helps is 0
+
     }
 }
 
 void coordinator() {
-    
+    // Wait until student comes
+
+    // Enter student in queue
+
+    // Signal tutor
 }
 
 int main() {
-    struct LinkedList *waitingRoom = malloc(sizeof(struct LinkedList));
+    waitingRoom = malloc(sizeof(struct LinkedList));
     struct person* registry[numStudents];
-    waitingRoom->length = 0;
 
     // Initialize (register) students
     int i;
     for (i = 0; i < numStudents; i++) {
         registry[i] =  malloc(sizeof(struct person));
-        registerStudent(registry[i], i + 3001, helps);
+        registerStudent(registry[i], i, helps);
     }
 
-    for (i = 0; i < numStudents; i++) {
-        insert(waitingRoom, registry[i]);
-    }
+    // Initialize semaphores
+    sem_init(&waitingRoomMutex, 0, 0);
+    sem_init(&queueWaitingStudent, 0, 0);
+    sem_init(&tutorWaitingStudents, 0, numTutors);
 
-    dequeue(waitingRoom);
-    printWaitingRoom(waitingRoom);
+    // Initialize number of chairs
+    numEmptyChairs = chairs;
 
     // Clean up student records
     for (i = 0; i < numStudents; i++) {

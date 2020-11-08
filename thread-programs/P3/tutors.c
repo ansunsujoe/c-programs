@@ -111,18 +111,33 @@ int tutoringSessionsCompleted;
 // Semaphores
 sem_t waitingRoomMutex;
 sem_t queueWaitingStudent;
-sem_t tutorWaitingStudents;
+sem_t registryMutex;
+sem_t coordinatorSignal;
+sem_t queueMutex;
 
 struct LinkedList *waitingRoom;
+struct person** registry;
 
 void tutor(int id) {
-    // Wait for coordinator signal
 
-    // Get student from queue
+    int studentID;
 
-    // Signal student
+    while (1) {
+        // Wait for coordinator signal
+        sem_wait(&coordinatorSignal);
 
-    // Wait for student to be done
+        // Get student from queue
+        sem_wait(&queueMutex);
+        studentID = dequeue(waitingRoom)->id;
+
+        // Signal student
+        sem_post(&registry[id]->tutorSem);
+
+        // Wait for student to be done
+        // This is where the tutoring is done
+        sem_wait(&registry[id]->tutorSem);
+    }
+    
 }
 
 void student(int id) {
@@ -144,20 +159,19 @@ void student(int id) {
         sem_post(&waitingRoomMutex);
 
         // Signal the coordinator
-        sem_post(queueWaitingStudent);
+        sem_post(&queueWaitingStudent);
 
         // Wait for tutor
-        sem_wait(tutorWaitingStudents);
+        sem_wait(&registry[id]->tutorSem);
 
         // Get tutored
         usleep(tutoringTime);
 
         // Signal tutor that it's over
-        // sem_post(registry);
+        sem_post(&registry[id]->tutorSem);
 
         // Decrement the number of helps
-
-        // Terminate thread if the number of helps is 0
+        registry[id]->priority--;
 
     }
 }
@@ -172,7 +186,8 @@ void coordinator() {
 
 int main() {
     waitingRoom = malloc(sizeof(struct LinkedList));
-    struct person* registry[numStudents];
+    // struct person* registry[numStudents];
+    registry = malloc((numStudents) * sizeof(struct person*));
 
     // Initialize (register) students
     int i;
@@ -182,9 +197,11 @@ int main() {
     }
 
     // Initialize semaphores
-    sem_init(&waitingRoomMutex, 0, 0);
+    sem_init(&waitingRoomMutex, 0, 1);
+    sem_init(&registryMutex, 0, 1);
+    sem_init(&queueMutex, 0, 1);
     sem_init(&queueWaitingStudent, 0, 0);
-    sem_init(&tutorWaitingStudents, 0, numTutors);
+    sem_init(&coordinatorSignal, 0, 0);
 
     // Initialize number of chairs
     numEmptyChairs = chairs;
@@ -193,6 +210,10 @@ int main() {
     for (i = 0; i < numStudents; i++) {
         free(registry[i]);
     }
+
+    // Clean up data structures
+    free(registry);
+    free(waitingRoom);
 
     return 0;
 }

@@ -3,6 +3,7 @@
 #include <semaphore.h> 
 #include <unistd.h>
 #include <stdlib.h>
+#include <assert.h>
 
 static int numStudents = 4;
 static int numTutors = 1;
@@ -108,7 +109,7 @@ int queueInWaitingRoom(struct LinkedList *waitingRoom, struct person *student) {
 /**
  * Insert in coordinator waiting structure
  */
-void insertForCoordinator(id) {
+void insertForCoordinator(int id) {
     struct queueNode *newNode = malloc(sizeof(struct queueNode));
     newNode->studentID = id;
 
@@ -136,6 +137,10 @@ int takeStudentFromWaiting() {
     struct queueNode *newFirst = queueForCoordinator.first->next;
     free(queueForCoordinator.first);
     queueForCoordinator.first = newFirst;
+    if (queueForCoordinator.first == NULL) {
+        queueForCoordinator.last = NULL;
+    }
+    return firstInLine;
 }
 
 /**
@@ -144,7 +149,7 @@ int takeStudentFromWaiting() {
 void registerStudent(struct person* student, int id, int priority) {
     student->id = id;
     student->priority = priority;
-    sem_init(student->tutorSem, 0, 0);
+    sem_init(&student->tutorSem, 0, 0);
 }
 
 // Global variables for output
@@ -164,9 +169,11 @@ sem_t queueMutex;
 struct LinkedList *waitingRoom;
 struct person** registry;
 
-void tutor(int id) {
+static void* tutor(void* id) {
 
+    int tutorID = (int) id;
     int studentID;
+    int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     while (1) {
         // Wait for coordinator signal
@@ -178,18 +185,21 @@ void tutor(int id) {
         sem_post(&queueMutex);
 
         // Signal student
-        sem_post(&registry[id]->tutorSem);
+        sem_post(&registry[studentID]->tutorSem);
 
         // Wait for student to be done
         // This is where the tutoring is done
-        sem_wait(&registry[id]->tutorSem);
+        sem_wait(&registry[studentID]->tutorSem);
     }
+    return NULL;
     
 }
 
-void student(int id) {
+static void* student(void* id) {
     // Iterate for helps needed
+    int studentID = (int) id;
     int i;
+
     for (i = 0; i < helps; i++) {
         // Program
         usleep(programmingTime);
@@ -203,14 +213,14 @@ void student(int id) {
         // Sit down and increment the number of chairs
         sem_wait(&waitingRoomMutex);
         numEmptyChairs--;
-        insertForCoordinator(id);
+        insertForCoordinator(studentID);
         sem_post(&waitingRoomMutex);
 
         // Signal the coordinator
         sem_post(&queueWaitingStudent);
 
         // Wait for tutor
-        sem_wait(&registry[id]->tutorSem);
+        sem_wait(&registry[studentID]->tutorSem);
 
         // Relinquish a waiting room chair
         sem_wait(&waitingRoomMutex);
@@ -221,40 +231,47 @@ void student(int id) {
         usleep(tutoringTime);
 
         // Signal tutor that it's over
-        sem_post(&registry[id]->tutorSem);
+        sem_post(&registry[studentID]->tutorSem);
 
         // Decrement the number of helps
-        registry[id]->priority--;
+        registry[studentID]->priority--;
 
     }
+    return NULL;
 }
 
-void coordinator() {
-    // Wait until student comes
-    sem_wait(&queueWaitingStudent);
+static void* coordinator() {
+    int studentID;
+    int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
-    // Take student out of the "waiting for coordinator" queue
-    sem_wait(&waitingRoomMutex);
-    int studentID = takeStudentFromWaiting();
-    sem_post(&waitingRoomMutex);
+    while (1) {
+        // Wait until student comes
+        sem_wait(&queueWaitingStudent);
 
-    // Put student in queue for tutor
-    sem_wait(&queueMutex);
-    insert(waitingRoom, registry[studentID]);
-    sem_post(&queueMutex);
+        // Take student out of the "waiting for coordinator" queue
+        sem_wait(&waitingRoomMutex);
+        studentID = takeStudentFromWaiting();
+        sem_post(&waitingRoomMutex);
 
-    // Signal tutor
-    sem_post(&coordinatorSignal);
+        // Put student in queue for tutor
+        sem_wait(&queueMutex);
+        insert(waitingRoom, registry[studentID]);
+        sem_post(&queueMutex);
 
+        // Signal tutor
+        sem_post(&coordinatorSignal);
+    }
+    return NULL;
 }
 
 int main() {
+    printf("Running\n");
     waitingRoom = malloc(sizeof(struct LinkedList));
     // struct person* registry[numStudents];
     registry = malloc((numStudents) * sizeof(struct person*));
 
     // Initialize (register) students
-    int i;
+    long i;
     for (i = 0; i < numStudents; i++) {
         registry[i] =  malloc(sizeof(struct person));
         registerStudent(registry[i], i, helps);
@@ -274,6 +291,42 @@ int main() {
     for (i = 0; i < numStudents; i++) {
         free(registry[i]);
     }
+
+    // Initialize thread storage
+    pthread_t *studentsTha;
+    pthread_t *tutorsTha;
+    pthread_t *coordinatorTha;
+
+    // Allocate memory for threads
+    studentsTha = malloc(sizeof(pthread_t) * numStudents);
+    tutorsTha = malloc(sizeof(pthread_t) * numTutors);
+    coordinatorTha = malloc(sizeof(pthread_t));
+
+    // Initialize coordinator thread
+    pthread_create(&coordinatorTha[0], NULL, coordinator, NULL);
+
+    // Initialize tutor threads
+    for (i = 0; i < numTutors; i++) {
+        pthread_create(&tutorsTha[i], NULL, tutor, (void *) i);
+    }
+
+    // Initialize student threads
+    for (i = 0; i < numStudents; i++) {
+        pthread_create(&studentsTha[i], NULL, student, (void *) i);
+    }
+
+    // Wait for student threads to end
+    for (i = 0; i < numStudents; i++) {
+        pthread_join(studentsTha[i], NULL);
+    }
+
+    // Cancel tutor threads
+    for (i = 0; i < numTutors; i++) {
+        assert(pthread_cancel(tutorsTha[i]) == 0);
+    }
+
+    // Cancel coordinator threads
+    assert(pthread_cancel(coordinatorTha[0]) == 0);
 
     // Clean up data structures
     free(registry);

@@ -27,6 +27,16 @@ struct LinkedList {
     struct node* head;
 };
 
+struct queueNode {
+    int studentID;
+    struct queueNode* next;
+};
+
+struct Queue {
+    struct queueNode* first;
+    struct queueNode* last;
+} queueForCoordinator;
+
 /**
  * Insert to the LinkedList of students in waiting room
  */
@@ -95,6 +105,42 @@ int queueInWaitingRoom(struct LinkedList *waitingRoom, struct person *student) {
     return 0;
 }
 
+/**
+ * Insert in coordinator waiting structure
+ */
+void insertForCoordinator(id) {
+    struct queueNode *newNode = malloc(sizeof(struct queueNode));
+    newNode->studentID = id;
+
+    // If head is null
+    if (queueForCoordinator.first == NULL) {
+        struct queueNode *oldHead = queueForCoordinator.first;
+        queueForCoordinator.first = newNode;
+        queueForCoordinator.last = newNode;
+        newNode->next = oldHead;
+    }
+    
+    // Set as the tail of the queue
+    else {
+        queueForCoordinator.last->next = newNode;
+        queueForCoordinator.last = newNode;
+    }
+    
+}
+
+/**
+ * Delete from coordinator waiting structure
+ */
+int takeStudentFromWaiting() {
+    int firstInLine = queueForCoordinator.first->studentID;
+    struct queueNode *newFirst = queueForCoordinator.first->next;
+    free(queueForCoordinator.first);
+    queueForCoordinator.first = newFirst;
+}
+
+/**
+ * Enter a student into the registry with the correct information about id and priority
+ */
 void registerStudent(struct person* student, int id, int priority) {
     student->id = id;
     student->priority = priority;
@@ -129,6 +175,7 @@ void tutor(int id) {
         // Get student from queue
         sem_wait(&queueMutex);
         studentID = dequeue(waitingRoom)->id;
+        sem_post(&queueMutex);
 
         // Signal student
         sem_post(&registry[id]->tutorSem);
@@ -156,6 +203,7 @@ void student(int id) {
         // Sit down and increment the number of chairs
         sem_wait(&waitingRoomMutex);
         numEmptyChairs--;
+        insertForCoordinator(id);
         sem_post(&waitingRoomMutex);
 
         // Signal the coordinator
@@ -163,6 +211,11 @@ void student(int id) {
 
         // Wait for tutor
         sem_wait(&registry[id]->tutorSem);
+
+        // Relinquish a waiting room chair
+        sem_wait(&waitingRoomMutex);
+        numEmptyChairs++;
+        sem_post(&waitingRoomMutex);
 
         // Get tutored
         usleep(tutoringTime);
@@ -178,10 +231,21 @@ void student(int id) {
 
 void coordinator() {
     // Wait until student comes
+    sem_wait(&queueWaitingStudent);
 
-    // Enter student in queue
+    // Take student out of the "waiting for coordinator" queue
+    sem_wait(&waitingRoomMutex);
+    int studentID = takeStudentFromWaiting();
+    sem_post(&waitingRoomMutex);
+
+    // Put student in queue for tutor
+    sem_wait(&queueMutex);
+    insert(waitingRoom, registry[studentID]);
+    sem_post(&queueMutex);
 
     // Signal tutor
+    sem_post(&coordinatorSignal);
+
 }
 
 int main() {

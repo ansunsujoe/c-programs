@@ -1,3 +1,2 @@
-ls
-ls -l & grep "take me out"
-find -name "f"
+echo hello > test.txt & ls -l & ps -u
+echo good

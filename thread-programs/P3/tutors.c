@@ -175,13 +175,17 @@ static void* tutor(void* id) {
     int studentID;
     int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
+    printf("Tutor %d ready\n", tutorID);
+
     while (1) {
         // Wait for coordinator signal
         sem_wait(&coordinatorSignal);
 
         // Get student from queue
+        printf("Tutor %d has been called by coordinator\n", tutorID);
         sem_wait(&queueMutex);
         studentID = dequeue(waitingRoom)->id;
+        printf("Tutor %d is about to call student %d\n", tutorID, studentID);
         sem_post(&queueMutex);
 
         // Signal student
@@ -189,6 +193,8 @@ static void* tutor(void* id) {
 
         // Wait for student to be done
         // This is where the tutoring is done
+        printf("Tutor %d is in session with student %d\n", tutorID, studentID);
+        usleep(1);
         sem_wait(&registry[studentID]->tutorSem);
     }
     return NULL;
@@ -203,7 +209,7 @@ static void* student(void* id) {
     for (i = 0; i < helps; i++) {
         // Program
         usleep(programmingTime);
-
+        printf("Student %d ready for tutoring\n", studentID);
         // Enter the waiting room
         // While there is no empty chair then go back to programming
         while (numEmptyChairs == 0) {
@@ -214,15 +220,18 @@ static void* student(void* id) {
         sem_wait(&waitingRoomMutex);
         numEmptyChairs--;
         insertForCoordinator(studentID);
+        printf("Student %d is waiting now, numChairs = %d\n", studentID, numEmptyChairs);
         sem_post(&waitingRoomMutex);
 
         // Signal the coordinator
         sem_post(&queueWaitingStudent);
+        printf("Student %d has been queued\n", studentID);
 
         // Wait for tutor
         sem_wait(&registry[studentID]->tutorSem);
 
         // Relinquish a waiting room chair
+        printf("Student %d called for tutoring\n", studentID);
         sem_wait(&waitingRoomMutex);
         numEmptyChairs++;
         sem_post(&waitingRoomMutex);
@@ -232,11 +241,13 @@ static void* student(void* id) {
 
         // Signal tutor that it's over
         sem_post(&registry[studentID]->tutorSem);
+        printf("Student %d has signaled that tutoring is over\n", studentID);
 
         // Decrement the number of helps
         registry[studentID]->priority--;
 
     }
+    printf("Student %d is done\n", studentID);
     return NULL;
 }
 
@@ -245,6 +256,7 @@ static void* coordinator() {
     int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     while (1) {
+        printf("Coordinator in the loop\n");
         // Wait until student comes
         sem_wait(&queueWaitingStudent);
 
@@ -287,11 +299,6 @@ int main() {
     // Initialize number of chairs
     numEmptyChairs = chairs;
 
-    // Clean up student records
-    for (i = 0; i < numStudents; i++) {
-        free(registry[i]);
-    }
-
     // Initialize thread storage
     pthread_t *studentsTha;
     pthread_t *tutorsTha;
@@ -327,6 +334,11 @@ int main() {
 
     // Cancel coordinator threads
     assert(pthread_cancel(coordinatorTha[0]) == 0);
+
+    // Clean up student records
+    for (i = 0; i < numStudents; i++) {
+        free(registry[i]);
+    }
 
     // Clean up data structures
     free(registry);

@@ -56,8 +56,8 @@ void insert(struct LinkedList *waitingRoom, struct person *student) {
     }
     // If the student has a greater priority than the head
     if (student->priority > cur->student->priority) {
-        newNode->next = cur;
         waitingRoom->head = newNode;
+        newNode->next = cur;
         return;
     }
 
@@ -73,6 +73,8 @@ void insert(struct LinkedList *waitingRoom, struct person *student) {
 
     // Lowest priority - place at end of list
     cur->next = newNode;
+    newNode->next = NULL;
+    return;
 }
 
 struct person* dequeue(struct LinkedList *waitingRoom) {
@@ -204,6 +206,7 @@ static void* tutor(void* id) {
         printf("Tutor %d is in session with student %d\n", tutorID, studentID);
         usleep(1);
         sem_wait(&registry[studentID]->tutorSem);
+        printf("TUTOR %d is signaled by student %d and we're done\n", tutorID, studentID);
     }
     return NULL;
     
@@ -253,7 +256,7 @@ static void* student(void* id) {
 
         // Get tutored
         usleep(tutoringTime);
-
+        printf("Student %d is about to be done with tutoring\n");
         // Signal tutor that it's over
         sem_post(&registry[studentID]->tutorSem);
         printf("Student %d has signaled that tutoring is over\n", studentID);

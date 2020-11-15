@@ -17,6 +17,8 @@ struct person {
     int id;
     int priority;
     sem_t tutorSem;
+    sem_t studentSem;
+    int tutorHelping;
 };
 
 struct node {
@@ -36,7 +38,7 @@ struct queueNode {
 struct Queue {
     struct queueNode* first;
     struct queueNode* last;
-} queueForCoordinator;
+};
 
 /**
  * Insert to the LinkedList of students in waiting room
@@ -45,15 +47,17 @@ void insert(struct LinkedList *waitingRoom, struct person *student) {
 
     // Iterator and new node
     struct node *cur = waitingRoom->head;
-    struct node *newNode = malloc(sizeof(struct node));
+    struct node *newNode = malloc(sizeof(struct node*));
     newNode->student = student;
 
     // If list is empty, then insert at head
     if (cur == NULL) {
-        printf("Started empty!!\n");
+        // printf("Started empty!!\n");
         waitingRoom->head = newNode;
+        newNode->next = NULL;
         return;
     }
+
     // If the student has a greater priority than the head
     if (student->priority > cur->student->priority) {
         waitingRoom->head = newNode;
@@ -78,21 +82,31 @@ void insert(struct LinkedList *waitingRoom, struct person *student) {
 }
 
 struct person* dequeue(struct LinkedList *waitingRoom) {
-    // Delete the head and free the memory given to the head node
-    struct node *deleteNode = waitingRoom->head;
-    waitingRoom->head = deleteNode->next;
-    
-    // Return the student structure for the tutor to see this
-    struct person *nextInLine = deleteNode->student;
-    free(deleteNode);
-    return nextInLine;
+    if (waitingRoom->head != NULL) {
+        // Delete the head and free the memory given to the head node
+        struct node *deleteNode = waitingRoom->head;
+        waitingRoom->head = deleteNode->next;
+        
+        // Return the student structure for the tutor to see this
+        struct person *nextInLine = deleteNode->student;
+        free(deleteNode);
+        return nextInLine;
+    }
+    return NULL;
 }
 
 /**
  * Print the waiting room for debugging purposes
  */
 void printWaitingRoom(struct LinkedList *waitingRoom) {
-    printf("Waiting Room: \n");
+    printf("\nWaiting Room: \n");
+
+    // If the waiting room has no one
+    if (waitingRoom->head == NULL) {
+        return;
+    }
+    
+    // Start the iteration
     struct node *cur = waitingRoom->head;
     while (cur != NULL) {
         if (cur->next == NULL) {
@@ -104,6 +118,27 @@ void printWaitingRoom(struct LinkedList *waitingRoom) {
         
         cur = cur->next;
     }
+    printf("\n");
+    return;
+}
+
+void printWaitCoordinatorArea(struct Queue *queueForCoordinator) {
+    printf("\nCoordinator Waiting Area: \n");
+
+    // Stop if head is null
+    if (queueForCoordinator->first == NULL) {
+        return;
+    }
+
+    // Iterate using the cur variable
+    struct queueNode *cur = queueForCoordinator->first;
+    while (cur != NULL) {
+        printf("Student ID: %d\n", cur->studentID);
+        cur = cur->next;
+    }
+
+    printf("\n");
+    return;
 }
 
 /**
@@ -118,22 +153,22 @@ int queueInWaitingRoom(struct LinkedList *waitingRoom, struct person *student) {
 /**
  * Insert in coordinator waiting structure
  */
-void insertForCoordinator(int id) {
+void insertForCoordinator(int id, struct Queue *queueForCoordinator) {
     struct queueNode *newNode = malloc(sizeof(struct queueNode));
     newNode->studentID = id;
 
     // If head is null
-    if (queueForCoordinator.first == NULL) {
-        struct queueNode *oldHead = queueForCoordinator.first;
-        queueForCoordinator.first = newNode;
-        queueForCoordinator.last = newNode;
-        newNode->next = oldHead;
+    if (queueForCoordinator->first == NULL) {
+        queueForCoordinator->first = newNode;
+        queueForCoordinator->last = newNode;
+        newNode->next = NULL;
     }
     
     // Set as the tail of the queue
     else {
-        queueForCoordinator.last->next = newNode;
-        queueForCoordinator.last = newNode;
+        queueForCoordinator->last->next = newNode;
+        queueForCoordinator->last = newNode;
+        newNode->next = NULL;
     }
     
 }
@@ -141,13 +176,19 @@ void insertForCoordinator(int id) {
 /**
  * Delete from coordinator waiting structure
  */
-int takeStudentFromWaiting() {
-    int firstInLine = queueForCoordinator.first->studentID;
-    struct queueNode *newFirst = queueForCoordinator.first->next;
-    free(queueForCoordinator.first);
-    queueForCoordinator.first = newFirst;
-    if (queueForCoordinator.first == NULL) {
-        queueForCoordinator.last = NULL;
+int takeStudentFromWaiting(struct Queue *queueForCoordinator) {
+    struct queueNode *firstNode = queueForCoordinator->first;
+    int firstInLine = queueForCoordinator->first->studentID;
+    struct queueNode *newFirst = queueForCoordinator->first->next;
+
+    // Free queue node if it is not null
+    // if (firstNode != NULL) {
+    //     free(firstNode);
+    // }
+    
+    queueForCoordinator->first = newFirst;
+    if (queueForCoordinator->first == NULL) {
+        queueForCoordinator->last = NULL;
     }
     return firstInLine;
 }
@@ -158,15 +199,17 @@ int takeStudentFromWaiting() {
 void registerStudent(struct person* student, int id, int priority) {
     student->id = id;
     student->priority = priority;
-    sem_init(&student->tutorSem, 0, 0);
+    // sem_init(&student->tutorSem, 0, 0);
+    student->tutorHelping = -1;
+
 }
 
 // Global variables for output
-int numEmptyChairs;
-int numStudentsWaiting;
-int notifications;
-int studentsCurrentlyHelped;
-int tutoringSessionsCompleted;
+int numEmptyChairs = 0;
+int numStudentsWaiting = 0;
+int notifications = 0;
+int studentsCurrentlyHelped = 0;
+int tutoringSessionsCompleted = 0;
 
 // Semaphores
 sem_t waitingRoomMutex;
@@ -174,8 +217,11 @@ sem_t queueWaitingStudent;
 sem_t registryMutex;
 sem_t coordinatorSignal;
 sem_t queueMutex;
+sem_t tutoringStatsMutex;
+sem_t numNotificationsMutex;
 
 struct LinkedList *waitingRoom;
+struct Queue *queueForCoordinator;
 struct person** registry;
 
 static void* tutor(void* id) {
@@ -193,20 +239,43 @@ static void* tutor(void* id) {
         // Get student from queue
         printf("Tutor %d has been called by coordinator\n", tutorID);
         sem_wait(&queueMutex);
-        studentID = dequeue(waitingRoom)->id;
+        struct person* studentToTutor = dequeue(waitingRoom);
+
+        // If there was nothing in the queue to receive, then the studentID will be null
+        if (studentToTutor == NULL) {
+            printf("Uhoh we got bad news, student is null.\n");
+            sem_post(&queueMutex);
+            continue;
+        }
+        
+        studentID = studentToTutor->id;
         printWaitingRoom(waitingRoom);
         printf("Tutor %d is about to call student %d\n", tutorID, studentID);
         sem_post(&queueMutex);
 
+        // Increment the students currently helped
+        sem_wait(&tutoringStatsMutex);
+        studentsCurrentlyHelped++;
+        sem_post(&tutoringStatsMutex);
+
         // Signal student
-        sem_post(&registry[studentID]->tutorSem);
+        registry[studentID]->tutorHelping = tutorID;
+        sem_post(&registry[studentID]->studentSem);
 
         // Wait for student to be done
         // This is where the tutoring is done
         printf("Tutor %d is in session with student %d\n", tutorID, studentID);
         usleep(1);
+        printf("Tutor is waiting on Student %d to signal tutoring over\n", studentID);
         sem_wait(&registry[studentID]->tutorSem);
         printf("TUTOR %d is signaled by student %d and we're done\n", tutorID, studentID);
+
+        // Update the number of tutoring sessions completed
+        sem_wait(&tutoringStatsMutex);
+        tutoringSessionsCompleted++;
+        studentsCurrentlyHelped--;
+        printf("T: Student %d tutored by Tutor %d. Students tutored now: %d. Total sessions tutored: %d\n", studentID, tutorID, studentsCurrentlyHelped, tutoringSessionsCompleted);
+        sem_post(&tutoringStatsMutex);
     }
     return NULL;
     
@@ -215,38 +284,42 @@ static void* tutor(void* id) {
 static void* student(void* id) {
     // Iterate for helps needed
     int studentID = (int) id;
-    int i;
-
-    for (i = 0; i < helps; i++) {
+    int i = 0;
+    while (i < helps) {
         // Program
         usleep(programmingTime);
         printf("Student %d ready for tutoring\n", studentID);
         // Enter the waiting room
         // While there is no empty chair then go back to programming
         while (numEmptyChairs == 0) {
-            printf("Student %d could not find space in waiting room\n", studentID);
+            printf("S: Student %d found no empty chair. Will try again later.\n", studentID);
             usleep(programmingTime);
         }
 
         // Sit down and increment the number of chairs
         sem_wait(&waitingRoomMutex);
         if (numEmptyChairs == 0) {
-            i--;
             sem_post(&waitingRoomMutex);
-            printf("Student %d could not find space in waiting room\n", studentID);
+            printf("Just released the mutex\n");
+            printf("S: Student %d found no empty chair. Will try again later.\n", studentID);
             continue;
         }
         numEmptyChairs--;
-        insertForCoordinator(studentID);
-        printf("Student %d is waiting now, numChairs = %d\n", studentID, numEmptyChairs);
+        printf("S: Student %d takes a seat. Empty chairs = %d.\n", studentID, numEmptyChairs);
+        insertForCoordinator(studentID, queueForCoordinator);
+        printWaitCoordinatorArea(queueForCoordinator);
         sem_post(&waitingRoomMutex);
 
-        // Signal the coordinator
+        // Increment the number of signals to the coordinator
+        // We are going to do a post to the coordinator
+        sem_wait(&numNotificationsMutex);
+        notifications++;
         sem_post(&queueWaitingStudent);
-        printf("Student %d has been queued\n", studentID);
+        printf("Student %d has just notified the coordinator\n", studentID);
+        sem_post(&numNotificationsMutex);
 
         // Wait for tutor
-        sem_wait(&registry[studentID]->tutorSem);
+        sem_wait(&registry[studentID]->studentSem);
 
         // Relinquish a waiting room chair
         sem_wait(&waitingRoomMutex);
@@ -256,16 +329,21 @@ static void* student(void* id) {
 
         // Get tutored
         usleep(tutoringTime);
-        printf("Student %d is about to be done with tutoring\n");
+        usleep(1);
+        printf("Student %d is about to be done with tutoring\n", studentID);
         // Signal tutor that it's over
         sem_post(&registry[studentID]->tutorSem);
-        printf("Student %d has signaled that tutoring is over\n", studentID);
+        printf("Student %d has signaled that tutoring is over.\n", studentID);
+        printf("S: Student %d received help from tutor %d\n", studentID, registry[studentID]->tutorHelping);
 
         // Decrement the number of helps
         registry[studentID]->priority--;
 
+        // Iterator
+        i++;
+        printf("Student %d priority is now %d and has completed %d iterations\n", studentID, registry[studentID]->priority, i);
     }
-    printf("Student %d is done\n", studentID);
+    printf("STUDENT %d is done\n", studentID);
     return NULL;
 }
 
@@ -274,20 +352,23 @@ static void* coordinator() {
     int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     while (1) {
-        printf("Coordinator in the loop\n");
+        // printf("Coordinator in the loop\n");
         // Wait until student comes
         sem_wait(&queueWaitingStudent);
 
         // Take student out of the "waiting for coordinator" queue
         sem_wait(&waitingRoomMutex);
-        studentID = takeStudentFromWaiting();
+        studentID = takeStudentFromWaiting(queueForCoordinator);
+        printWaitCoordinatorArea(queueForCoordinator);
         sem_post(&waitingRoomMutex);
+
+        // Print out the information
+        printf("C: Student %d with priority %d in the queue. Waiting students now = %d. Total requests = %d.\n", studentID, registry[studentID]->priority, numStudentsWaiting, notifications);
 
         // Put student in queue for tutor
         sem_wait(&queueMutex);
         insert(waitingRoom, registry[studentID]);
         printWaitingRoom(waitingRoom);
-        printf("Queued successfully\n");
         sem_post(&queueMutex);
 
         // Signal tutor
@@ -310,20 +391,25 @@ int main(int argc, char *argv[]) {
         helps = atoi(argv[4]);
     }
 
-    waitingRoom = malloc(sizeof(struct LinkedList));
+    waitingRoom = malloc(sizeof(struct LinkedList*));
+    queueForCoordinator = malloc(sizeof(struct Queue*));
     registry = malloc((numStudents) * sizeof(struct person*));
 
     // Initialize (register) students
     long i;
     for (i = 0; i < numStudents; i++) {
-        registry[i] =  malloc(sizeof(struct person));
+        registry[i] =  malloc(sizeof(struct person*));
         registerStudent(registry[i], i, helps);
+        sem_init(&registry[i]->tutorSem, 0, 0);
+        sem_init(&registry[i]->studentSem, 0, 0);
     }
 
     // Initialize semaphores
     sem_init(&waitingRoomMutex, 0, 1);
     sem_init(&registryMutex, 0, 1);
     sem_init(&queueMutex, 0, 1);
+    sem_init(&tutoringStatsMutex, 0, 1);
+    sem_init(&numNotificationsMutex, 0, 1);
     sem_init(&queueWaitingStudent, 0, 0);
     sem_init(&coordinatorSignal, 0, 0);
 

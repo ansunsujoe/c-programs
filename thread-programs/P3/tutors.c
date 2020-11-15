@@ -43,15 +43,6 @@ struct Queue {
 };
 
 /**
- * This is a debugging method
- * To catch segmentation faults (SIGSEGV)
- */
-void hsignal(int i) {
-  printf("Segmentation fault here in thread %d!!!\n", pthread_self());
-  pthread_exit(0);
-}
-
-/**
  * Insert to the LinkedList of students in waiting room
  */
 void insert(struct LinkedList *waitingRoom, struct person *student) {
@@ -234,12 +225,40 @@ sem_t numNotificationsMutex;
 struct LinkedList *waitingRoom;
 struct Queue *queueForCoordinator;
 struct person** registry;
+int *createThreadIdNums;
+
+// Initialize thread storage
+pthread_t *studentsTha;
+pthread_t *tutorsTha;
+pthread_t *coordinatorTha;
+
+/**
+ * This is a debugging method
+ * To catch segmentation faults (SIGSEGV)
+ */
+void studentsignal(int i) {
+    printf("There's a segmentation fault in student!!!\n");
+    pthread_exit(0);
+}
+
+void tutorsignal(int i) {
+    printf("There's a segmentation fault in tutor!!!\n");
+    pthread_exit(0);
+}
+
+void coordsignal(int i) {
+    printf("There's a segmentation fault in coordinator!!!\n");
+    pthread_exit(0);
+}
 
 static void* tutor(void* id) {
 
+    // Signal catching for segmentation fault
+    // sigset(SIGSEGV, tutorsignal);
+
     int tutorID = (int) id;
     int studentID;
-    int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     printf("Tutor %d ready\n", tutorID);
 
@@ -293,8 +312,13 @@ static void* tutor(void* id) {
 }
 
 static void* student(void* id) {
+
+    // Signal catching for segmentation fault
+    // sigset(SIGSEGV, studentsignal);
+
     // Iterate for helps needed
-    int studentID = (int) id;
+    int studentID = (int) id - 1;
+    printf("Student ID %d INITIALIZED\n", studentID);
     int i = 0;
     while (i < helps) {
         // Program
@@ -359,8 +383,12 @@ static void* student(void* id) {
 }
 
 static void* coordinator() {
+
+    // Signal catching for segmentation fault
+    // sigset(SIGSEGV, coordsignal);
+
     int studentID;
-    int s = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+    pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
 
     while (1) {
         // printf("Coordinator in the loop\n");
@@ -390,9 +418,6 @@ static void* coordinator() {
 
 int main(int argc, char *argv[]) {
 
-    // Signal catching for segmentation fault
-    sigset(SIGSEGV, hsignal);
-
     // Get the arguments
     if (argc != 5) {
         printf("Incorrect amount of arguments\n");
@@ -403,6 +428,7 @@ int main(int argc, char *argv[]) {
         numTutors = atoi(argv[2]);
         chairs = atoi(argv[3]);
         helps = atoi(argv[4]);
+        printf("Number of students: %d\n", numStudents);
     }
 
     waitingRoom = malloc(sizeof(struct LinkedList));
@@ -430,32 +456,33 @@ int main(int argc, char *argv[]) {
     // Initialize number of chairs
     numEmptyChairs = chairs;
 
-    // Initialize thread storage
-    pthread_t *studentsTha;
-    pthread_t *tutorsTha;
-    pthread_t *coordinatorTha;
-
     // Allocate memory for threads
     studentsTha = malloc(sizeof(pthread_t) * numStudents);
     tutorsTha = malloc(sizeof(pthread_t) * numTutors);
-    coordinatorTha = malloc(sizeof(pthread_t));
+    coordinatorTha = malloc(sizeof(pthread_t) * 1);
+
+    // Allocate space for id numbers (initialized for helping pthread_create)
+    int maxIds = numStudents + numTutors;
+    createThreadIdNums = malloc(sizeof(int) * maxIds);
 
     // Initialize coordinator thread
     pthread_create(&coordinatorTha[0], NULL, coordinator, NULL);
 
     // Initialize tutor threads
     for (i = 0; i < numTutors; i++) {
-        pthread_create(&tutorsTha[i], NULL, tutor, (void *) i);
+        createThreadIdNums[i] = i + 1;
+        pthread_create(&tutorsTha[i], NULL, tutor, (void *) createThreadIdNums[i]);
     }
 
     // Initialize student threads
     for (i = 0; i < numStudents; i++) {
-        pthread_create(&studentsTha[i], NULL, student, (void *) i);
+        createThreadIdNums[i] = i + 1;
+        pthread_create(&studentsTha[i], NULL, student, (void *) createThreadIdNums[i]);
     }
 
     // Wait for student threads to end
     for (i = 0; i < numStudents; i++) {
-        pthread_join(studentsTha[i], NULL);
+        assert(pthread_join(studentsTha[i], NULL) == 0);
     }
 
     // Cancel tutor threads

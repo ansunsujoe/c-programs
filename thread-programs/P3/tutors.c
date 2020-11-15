@@ -4,6 +4,8 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <signal.h>
+#include <sys/types.h>
 
 int numStudents = 4;
 int numTutors = 1;
@@ -41,13 +43,22 @@ struct Queue {
 };
 
 /**
+ * This is a debugging method
+ * To catch segmentation faults (SIGSEGV)
+ */
+void hsignal(int i) {
+  printf("Segmentation fault here in thread %d!!!\n", pthread_self());
+  pthread_exit(0);
+}
+
+/**
  * Insert to the LinkedList of students in waiting room
  */
 void insert(struct LinkedList *waitingRoom, struct person *student) {
 
     // Iterator and new node
     struct node *cur = waitingRoom->head;
-    struct node *newNode = malloc(sizeof(struct node*));
+    struct node *newNode = malloc(sizeof(struct node));
     newNode->student = student;
 
     // If list is empty, then insert at head
@@ -183,7 +194,7 @@ int takeStudentFromWaiting(struct Queue *queueForCoordinator) {
 
     // Free queue node if it is not null
     // if (firstNode != NULL) {
-    //     free(firstNode);
+    //    free(firstNode);
     // }
     
     queueForCoordinator->first = newFirst;
@@ -379,6 +390,9 @@ static void* coordinator() {
 
 int main(int argc, char *argv[]) {
 
+    // Signal catching for segmentation fault
+    sigset(SIGSEGV, hsignal);
+
     // Get the arguments
     if (argc != 5) {
         printf("Incorrect amount of arguments\n");
@@ -391,14 +405,14 @@ int main(int argc, char *argv[]) {
         helps = atoi(argv[4]);
     }
 
-    waitingRoom = malloc(sizeof(struct LinkedList*));
-    queueForCoordinator = malloc(sizeof(struct Queue*));
+    waitingRoom = malloc(sizeof(struct LinkedList));
+    queueForCoordinator = malloc(sizeof(struct Queue));
     registry = malloc((numStudents) * sizeof(struct person*));
 
     // Initialize (register) students
     long i;
     for (i = 0; i < numStudents; i++) {
-        registry[i] =  malloc(sizeof(struct person*));
+        registry[i] = malloc(sizeof(struct person));
         registerStudent(registry[i], i, helps);
         sem_init(&registry[i]->tutorSem, 0, 0);
         sem_init(&registry[i]->studentSem, 0, 0);

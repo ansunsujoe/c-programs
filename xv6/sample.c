@@ -26,14 +26,14 @@ main(int argc, char *argv[])
   uchar *bitmap;
 
   if(argc < 2){
-    fprintf(stderr, "Usage: sample fs.img ...\n");
+    fprintf(stderr, "Usage: fcheck <file_system_image>\n");
     exit(1);
   }
 
   // Open the file system image
   fsfd = open(argv[1], O_RDONLY);
-  if(fsfd < 0){
-    perror(argv[1]);
+  if (fsfd < 0){
+    fprintf(stderr, "image not found.\n");
     exit(1);
   }
 
@@ -41,8 +41,8 @@ main(int argc, char *argv[])
   // Change this later
   addr = mmap(NULL, 524248, PROT_READ, MAP_PRIVATE, fsfd, 0);
   if (addr == MAP_FAILED){
-	perror("mmap failed");
-	exit(1);
+	  perror("mmap failed");
+  	exit(1);
   }
   /* read the super block */
   sb = (struct superblock *) (addr + 1 * BLOCK_SIZE);
@@ -60,14 +60,14 @@ main(int argc, char *argv[])
   de = (struct dirent *) (addr + (dip[ROOTINO].addrs[0])*BLOCK_SIZE);
 
   // TEST 3: If the root directory is null, then throw error
-  if (dip[ROOTINO] == NULL) {
-    printf("ERROR: root directory does not exist.\n");
+  if (dip[ROOTINO].size == 0) {
+    fprintf(stderr, "ERROR: root directory does not exist.\n");
     exit(1);
   }
 
   // TEST 3: If the root directory's type is not DIR = 1, then throw an error
   if (dip[ROOTINO].type != 1) {
-    printf("ERROR: root directory does not exist.\n");
+    fprintf(stderr, "ERROR: root directory does not exist.\n");
     exit(1);
   }
 
@@ -80,13 +80,15 @@ main(int argc, char *argv[])
 
   // Iterate through root directory to check for parent directory and current (.. and .)
   for (i = 0; i < n; i++,de++) {
- 	  printf(" inum %d, name %s ", de->inum, de->name);
-  	printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
+    if (de->inum != 0 || dip[de->inum].size != 0) {
+ 	    printf(" inum %d, name %s ", de->inum, de->name);
+  	  printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
+    }
 
     // Test 3: If parent directory is not itself, then error
-    if (de->name == "..") {
+    if (strcmp(de->name, "..") == 0) {
       if (de->inum != ROOTINO) {
-        printf("ERROR: root directory does not exist.\n");
+        fprintf(stderr, "ERROR: root directory does not exist.\n");
         exit(1);
       }
       else {
@@ -94,11 +96,12 @@ main(int argc, char *argv[])
         break;
       }
     }
+
   }
 
   // If we cannot find the parent in the root directory, then throw an error
   if (parentFound == false) {
-    printf("ERROR: root directory does not exist.\n");
+    fprintf(stderr, "ERROR: root directory does not exist.\n");
     exit(1);
   }
 
@@ -120,14 +123,14 @@ main(int argc, char *argv[])
     // If inode is unallocated, make sure size is 0 and type is 0 
     if (inodeBlock[iIndex].type == 0) {
       if (inodeBlock[iIndex].size != 0) {
-        printf("ERROR: bad inode.\n");
+        fprintf(stderr, "ERROR: bad inode.\n");
 	      exit(1);
       }
     }
 
     // If inode is not type 1, 2, or 3, then we raise an error for bad inode.
     else if (inodeBlock[iIndex].type != 1 && inodeBlock[iIndex].type != 2 && inodeBlock[iIndex].type != 3) {
-      printf("ERROR: bad inode.\n");
+      fprintf(stderr, "ERROR: bad inode.\n");
       exit(1);
     }
 
@@ -142,22 +145,25 @@ main(int argc, char *argv[])
       parentFound = false;
       currentFound = false;
 
-      // Iterate through root directory to check for parent directory and current (.. and .)
-      for (i = 0; i < n; i++, de++) {
- 	      printf(" inum %d, name %s ", de->inum, de->name);
-  	    printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
+      // Iterate through all directories to check for parent directory and current (.. and .)
+      int k;
+      for (k = 0; k < n; k++, de++) {
+        if (de->inum != 0 || dip[de->inum].size != 0) {
+          printf(" inum %d, name %s ", de->inum, de->name);
+  	      printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
+        }
 
         // Check if we have crossed paths with the parent entry
-        if (de->name == "..") {
+        if (strcmp(de->name, "..") == 0) {
           parentFound = true;
         }
 
         // Check if the current directory entry is in order
-        if (de->name == ".") {
+        if (strcmp(de->name, ".") == 0) {
           // TEST 4: If the current directory does not point to the current inode
           // then we error out
           if (de->inum != i) {
-            printf("ERROR: directory not properly formatted.\n");
+            fprintf(stderr, "ERROR: directory not properly formatted.\n");
             exit(1);
           }
           else {
@@ -165,16 +171,11 @@ main(int argc, char *argv[])
           }
         }
 
-        // Early break if we found both parent and current
-        if (parentFound == true && currentFound == true) {
-          break;
-        }
-
       }
       // TEST 4: Check the flags - if current or parent is false, then it does
       // not exist and we error out.
       if (parentFound == false || currentFound == false) {
-        printf("ERROR: directory not properly formatted.\n");
+        fprintf(stderr, "ERROR: directory not properly formatted.\n");
         exit(1);
       }
 

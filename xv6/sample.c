@@ -24,6 +24,7 @@ main(int argc, char *argv[])
   struct superblock *sb;
   struct dirent *de;
   uchar *bitmap;
+  struct stat st;
 
   if(argc < 2){
     fprintf(stderr, "Usage: fcheck <file_system_image>\n");
@@ -37,11 +38,19 @@ main(int argc, char *argv[])
     exit(1);
   }
 
+  // Get stats about the filesystem (especially the size is needed)
+  if (fstat(fsfd, &st) < 0){
+    fprintf(stderr, "Cannot get stats for file.\n");
+    close(fsfd);  // Close called on the file descriptor (done in each error case)
+    exit(1);
+  }
+
   /* Dont hard code the size of file. Use fstat to get the size */
   // Change this later
-  addr = mmap(NULL, 524248, PROT_READ, MAP_PRIVATE, fsfd, 0);
+  addr = mmap(NULL, st.st_size, PROT_READ, MAP_PRIVATE, fsfd, 0);
   if (addr == MAP_FAILED){
 	  perror("mmap failed");
+    close(fsfd);
   	exit(1);
   }
   /* read the super block */
@@ -62,12 +71,14 @@ main(int argc, char *argv[])
   // TEST 3: If the root directory is null, then throw error
   if (dip[ROOTINO].size == 0) {
     fprintf(stderr, "ERROR: root directory does not exist.\n");
+    close(fsfd);
     exit(1);
   }
 
   // TEST 3: If the root directory's type is not DIR = 1, then throw an error
   if (dip[ROOTINO].type != 1) {
     fprintf(stderr, "ERROR: root directory does not exist.\n");
+    close(fsfd);
     exit(1);
   }
 
@@ -80,15 +91,12 @@ main(int argc, char *argv[])
 
   // Iterate through root directory to check for parent directory and current (.. and .)
   for (i = 0; i < n; i++,de++) {
-    if (de->inum != 0 || dip[de->inum].size != 0) {
- 	    printf(" inum %d, name %s ", de->inum, de->name);
-  	  printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
-    }
 
     // Test 3: If parent directory is not itself, then error
     if (strcmp(de->name, "..") == 0) {
       if (de->inum != ROOTINO) {
         fprintf(stderr, "ERROR: root directory does not exist.\n");
+        close(fsfd);
         exit(1);
       }
       else {
@@ -96,12 +104,12 @@ main(int argc, char *argv[])
         break;
       }
     }
-
   }
 
   // If we cannot find the parent in the root directory, then throw an error
   if (parentFound == false) {
     fprintf(stderr, "ERROR: root directory does not exist.\n");
+    close(fsfd);
     exit(1);
   }
 
@@ -124,6 +132,7 @@ main(int argc, char *argv[])
     if (inodeBlock[iIndex].type == 0) {
       if (inodeBlock[iIndex].size != 0) {
         fprintf(stderr, "ERROR: bad inode.\n");
+        close(fsfd);
 	      exit(1);
       }
     }
@@ -131,9 +140,43 @@ main(int argc, char *argv[])
     // If inode is not type 1, 2, or 3, then we raise an error for bad inode.
     else if (inodeBlock[iIndex].type != 1 && inodeBlock[iIndex].type != 2 && inodeBlock[iIndex].type != 3) {
       fprintf(stderr, "ERROR: bad inode.\n");
+      close(fsfd);
       exit(1);
     }
 
+    // Calculate where the valid addresses for data blocks starts and ends
+    uint dataBlockStart = 3 + (sb->ninodes / IPB) + (sb->size / BPB) + 1;
+    uint dataBlockEnd = dataBlockStart + sb->nblocks - 1;
+
+    // Iterate through the inode addresses
+    int j = 0;
+    uint currentAddress;
+    for (j = 0; j < NDIRECT + 1; j++) {
+      // Test 2: Check if each address in the addrs[] is valid. 
+      // If not, throw an error message
+      currentAddress = inodeBlock[iIndex].addrs[j];
+      
+      // If the address is not null (unallocated)
+      if (currentAddress != 0) {
+        // TEST 2: If the address is out of the data block range
+        if (currentAddress < dataBlockStart || currentAddress > dataBlockEnd) {
+          // Check if it is a direct or indirect address that is violating:
+          // Pick which error to throw
+          // Case 1: Indirect error
+          if (j == NDIRECT) {
+            fprintf(stderr, "ERROR: bad indirect address in inode.\n");
+            close(fsfd);
+            exit(1);
+          }
+          // Case 2: Direct error
+          else {
+            fprintf(stderr, "ERROR: bad direct address in inode.\n");
+            close(fsfd);
+            exit(1);
+          }
+        }
+      }
+    }
     // TEST 4: Checking if a directory is properly formatted
     if (inodeBlock[iIndex].type == 1) {
 
@@ -164,6 +207,7 @@ main(int argc, char *argv[])
           // then we error out
           if (de->inum != i) {
             fprintf(stderr, "ERROR: directory not properly formatted.\n");
+            close(fsfd);
             exit(1);
           }
           else {
@@ -176,20 +220,15 @@ main(int argc, char *argv[])
       // not exist and we error out.
       if (parentFound == false || currentFound == false) {
         fprintf(stderr, "ERROR: directory not properly formatted.\n");
+        close(fsfd);
         exit(1);
       }
 
     }
 
-    // Iterate through the inode addresses
-    int j = 0;
-    for (j = 0; j < NDIRECT + 1; j++) {
-      
-    }
   }
 
   // Exit
   exit(0);
-
 }
 

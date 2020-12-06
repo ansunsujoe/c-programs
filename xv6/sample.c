@@ -120,6 +120,7 @@ main(int argc, char *argv[])
   struct dinode *inodeBlock;
   int bmchecker[sb->nblocks];
   int inodeChecker[sb->ninodes];
+  int refChecker[sb->ninodes];
 
   // Calculate where the valid addresses for data blocks starts and ends
   uint dataBlockStart = 3 + (sb->ninodes / IPB) + (sb->size / BPB) + 1;
@@ -276,6 +277,25 @@ main(int argc, char *argv[])
   for (i = 0; i < sb->nblocks; i++) {
     if (bmchecker[i] != 0 && bmchecker[i] != 2) {
       fprintf(stderr, "ERROR: bitmap marks block in use but it is not in use.\n");
+      close(fsfd);
+      exit(1);
+    }
+  }
+
+  // TEST 9-10: Let's see if the inode checker's final state is as desired
+  // Possible states for each inode:
+  //    0 - not in use and not referenced in directory
+  //    1 - not in use but referenced in directory (INCONSISTENT!)
+  //    2 - in use but not referenced in directory (INCONSISTENT!)
+  //    3 - in use and referenced in directory
+  for (i = 0; i < sb->ninodes; i++) {
+    if (inodeChecker[i] == 2) {
+      fprintf(stderr, "ERROR: inode marked use but not found in a directory.\n");
+      close(fsfd);
+      exit(1);
+    }
+    else if (inodeChecker[i] == 1) {
+      fprintf(stderr, "ERROR: inode referred to in directory but marked free.\n");
       close(fsfd);
       exit(1);
     }

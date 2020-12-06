@@ -1,0 +1,19 @@
+passenger() {
+    while (1) {
+        // Wait for the roller coaster to be empty
+        sem_wait(&load);
+
+        // Get inside the roller coaster
+        sem_wait(&numCarMutex);
+        numInCar++;
+        in();
+
+        // If I am the last one in, then it is my job to signal the car
+        if (num == m) {
+            sem_post(&carFull);
+        }
+        sem_post(&numCarMutex);
+
+        // Wait to unload
+    }
+}

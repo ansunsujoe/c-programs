@@ -118,6 +118,17 @@ main(int argc, char *argv[])
   // Variables needed
   uint iIndex;
   struct dinode *inodeBlock;
+  int bmchecker[sb->nblocks];
+  int inodeChecker[sb->ninodes];
+
+  // Calculate where the valid addresses for data blocks starts and ends
+  uint dataBlockStart = 3 + (sb->ninodes / IPB) + (sb->size / BPB) + 1;
+  uint dataBlockEnd = dataBlockStart + sb->nblocks - 1;
+
+  // Populate the bitmap checker with values from bitmap for each block
+  for (i = dataBlockStart; i < sb->nblocks; i++) {
+    bmchecker[i] = (int) bitmap[i/8] >> (i % 8) & 1;
+  }
 
   printf("Beginning test 1\n");
 
@@ -128,8 +139,8 @@ main(int argc, char *argv[])
     inodeBlock = (struct dinode *) (addr + IBLOCK((uint)i) * BLOCK_SIZE);
     iIndex = i % IPB;
     
-    // If inode is unallocated, make sure size is 0 and type is 0 
-    if (inodeBlock[iIndex].type == 0) {
+    // If inode is unallocated, make sure size is 0 and type is 0 and links is 0
+    if (inodeBlock[iIndex].type == 0 && inodeBlock[iIndex].nlink == 0) {
       if (inodeBlock[iIndex].size != 0) {
         fprintf(stderr, "ERROR: bad inode.\n");
         close(fsfd);
@@ -144,9 +155,8 @@ main(int argc, char *argv[])
       exit(1);
     }
 
-    // Calculate where the valid addresses for data blocks starts and ends
-    uint dataBlockStart = 3 + (sb->ninodes / IPB) + (sb->size / BPB) + 1;
-    uint dataBlockEnd = dataBlockStart + sb->nblocks - 1;
+    // Note that the inode is in use
+    inodeChecker[i] += 2;
 
     // Iterate through the inode addresses
     int j = 0;
@@ -155,7 +165,6 @@ main(int argc, char *argv[])
       // Test 2: Check if each address in the addrs[] is valid. 
       // If not, throw an error message
       currentAddress = inodeBlock[iIndex].addrs[j];
-      
       // If the address is not null (unallocated)
       if (currentAddress != 0) {
         // TEST 2: If the address is out of the data block range
@@ -174,6 +183,40 @@ main(int argc, char *argv[])
             close(fsfd);
             exit(1);
           }
+        }
+
+        // Check the validity of the bitmap using our bitmap checker
+        // Used for tests 5-8
+        // In the bitmap array: 1 - block used but not accouted for
+        //                      2 - block used and accounted for
+        //                      0 - block not used
+
+        // Case 1: Inode has the address but bitmap says it is free
+        if (bmchecker[currentAddress] == 0) {
+          fprintf(stderr, "ERROR: address used by inode but marked free in bitmap.\n");
+          close(fsfd);
+          exit(1);
+        }
+        // Case 2: Inode has an address that has already been accounted for by
+        // a previous inode
+        else if (bmchecker[currentAddress] == 2) {
+          // An indirect block is throwing the duplicate error
+          if (j == NDIRECT) {
+            fprintf(stderr, "ERROR: indirect address used more than once.\n");
+            close(fsfd);
+            exit(1);
+          }
+          // A direct block is throwing the duplicate error
+          else {
+            fprintf(stderr, "ERROR: direct address used more than once.\n");
+            close(fsfd);
+            exit(1);
+          }
+        }
+        // Case 3: Inode has an address that has not been accounted for before
+        // and we will mark that address in bmchecker as accounted for
+        else if (bmchecker[currentAddress] == 1) {
+          bmchecker[currentAddress] = 2;
         }
       }
     }
@@ -215,6 +258,8 @@ main(int argc, char *argv[])
           }
         }
 
+        // Record in the inode checker that the inum was referenced
+        inodeChecker[de->inum - 1] += 1;
       }
       // TEST 4: Check the flags - if current or parent is false, then it does
       // not exist and we error out.
@@ -223,9 +268,17 @@ main(int argc, char *argv[])
         close(fsfd);
         exit(1);
       }
-
     }
+  }
 
+  // TEST 6: If bitmap checker still has used blocks not accounted for
+  // in any inodes addrs[] field, then flag an error
+  for (i = 0; i < sb->nblocks; i++) {
+    if (bmchecker[i] != 0 && bmchecker[i] != 2) {
+      fprintf(stderr, "ERROR: bitmap marks block in use but it is not in use.\n");
+      close(fsfd);
+      exit(1);
+    }
   }
 
   // Exit

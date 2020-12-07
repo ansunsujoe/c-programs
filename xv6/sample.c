@@ -58,12 +58,16 @@ main(int argc, char *argv[])
   printf("fs size %d, no. of blocks %d, no. of inodes %d \n", sb->size, sb->nblocks, sb->ninodes);
 
   /* read the inodes */
-  dip = (struct dinode *) (addr + IBLOCK((uint)0)*BLOCK_SIZE); 
+  dip = (struct dinode *) (addr + (IBLOCK((uint)0))*BLOCK_SIZE); 
   printf("begin addr %p, begin inode %p , offset %d \n", addr, dip, (char *)dip -addr);
   printf("Root inode  size %d links %d type %d \n", dip[ROOTINO].size, dip[ROOTINO].nlink, dip[ROOTINO].type);
   
   /* read the bitmap */
-  bitmap = (uchar *) (addr + BBLOCK(0, sb->ninodes) * BLOCK_SIZE);
+  // bitmap = (uchar *) (addr + BBLOCK(0, sb->ninodes) * BLOCK_SIZE);
+  bitmap = (uchar *) (addr + (sb->ninodes / IPB + 3) * BLOCK_SIZE);
+  for (i = 0; i < 10; i++) {
+    printf("Bitmap chunk #%d: %x\n", i, bitmap[i]);
+  }
 
   // get the address of root dir 
   de = (struct dirent *) (addr + (dip[ROOTINO].addrs[0])*BLOCK_SIZE);
@@ -118,7 +122,7 @@ main(int argc, char *argv[])
   // Variables needed
   uint iIndex;
   struct dinode *inodeBlock;
-  int bmchecker[sb->nblocks];
+  int bmchecker[sb->size];
   int inodeChecker[sb->ninodes];
   int refChecker[sb->ninodes];
 
@@ -127,7 +131,7 @@ main(int argc, char *argv[])
   uint dataBlockEnd = dataBlockStart + sb->nblocks - 1;
 
   // Populate the bitmap checker with values from bitmap for each block
-  for (i = dataBlockStart; i < sb->nblocks; i++) {
+  for (i = dataBlockStart; i < sb->size; i++) {
     bmchecker[i] = (int) bitmap[i/8] >> (i % 8) & 1;
   }
 
@@ -159,13 +163,14 @@ main(int argc, char *argv[])
     // Note that the inode is in use
     inodeChecker[i] += 2;
 
-    // Iterate through the inode addresses
+    // Iterate through the inode addresses -> this is for DIRECTS ONLY
     int j = 0;
     uint currentAddress;
     for (j = 0; j < NDIRECT + 1; j++) {
       // Test 2: Check if each address in the addrs[] is valid. 
       // If not, throw an error message
       currentAddress = inodeBlock[iIndex].addrs[j];
+
       // If the address is not null (unallocated)
       if (currentAddress != 0) {
         // TEST 2: If the address is out of the data block range
@@ -221,6 +226,12 @@ main(int argc, char *argv[])
         }
       }
     }
+
+    // Iterate through the inode addresses -> this is for INDIRECT BLOCK
+    currentAddress = inodeBlock[iIndex].addrs[NDIRECT];
+    
+
+
     // TEST 4: Checking if a directory is properly formatted
     if (inodeBlock[iIndex].type == 1) {
 
@@ -260,7 +271,7 @@ main(int argc, char *argv[])
         }
 
         // Record in the inode checker that the inum was referenced
-        inodeChecker[de->inum - 1] += 1;
+        inodeChecker[de->inum] += 1;
       }
       // TEST 4: Check the flags - if current or parent is false, then it does
       // not exist and we error out.
@@ -270,12 +281,23 @@ main(int argc, char *argv[])
         exit(1);
       }
     }
+
+    // Doing special things in the case of a regular file
+    if (inodeBlock[iIndex].type == 2) {
+      // Add the number of references to the ref checker
+      // The purpose is that when a directory references the file,
+      // we will decrement the ref checker every time and should
+      // end up with 0 for each address in a consistent file system
+      refChecker[i] += inodeBlock[iIndex].nlink;
+    }
   }
 
   // TEST 6: If bitmap checker still has used blocks not accounted for
   // in any inodes addrs[] field, then flag an error
-  for (i = 0; i < sb->nblocks; i++) {
-    if (bmchecker[i] != 0 && bmchecker[i] != 2) {
+  for (i = dataBlockStart; i < dataBlockStart + sb->nblocks + 1; i++) {
+    printf("Block %d has the value %d in bmchecker.\n", i, bmchecker[i]);
+    if (bmchecker[i] == 1) {
+      printf("Offending block: %d\n", i);
       fprintf(stderr, "ERROR: bitmap marks block in use but it is not in use.\n");
       close(fsfd);
       exit(1);
@@ -296,6 +318,17 @@ main(int argc, char *argv[])
     }
     else if (inodeChecker[i] == 1) {
       fprintf(stderr, "ERROR: inode referred to in directory but marked free.\n");
+      close(fsfd);
+      exit(1);
+    }
+  }
+
+  // TEST 11: Make sure that the number of links (refs) to a regular file
+  // that is recorded in inode is equal to actuality in the directory entries
+  for (i = 0; i < sb->ninodes; i++) {
+    // If the value in refChecker is anything other than 0, then we have reference error
+    if (refChecker[i] != 0) {
+      fprintf(stderr, "ERROR: bad reference count for file.\n");
       close(fsfd);
       exit(1);
     }

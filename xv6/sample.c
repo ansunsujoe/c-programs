@@ -65,9 +65,6 @@ main(int argc, char *argv[])
   /* read the bitmap */
   // bitmap = (uchar *) (addr + BBLOCK(0, sb->ninodes) * BLOCK_SIZE);
   bitmap = (uchar *) (addr + (sb->ninodes / IPB + 3) * BLOCK_SIZE);
-  for (i = 0; i < 10; i++) {
-    printf("Bitmap chunk #%d: %x\n", i, bitmap[i]);
-  }
 
   // get the address of root dir 
   de = (struct dirent *) (addr + (dip[ROOTINO].addrs[0])*BLOCK_SIZE);
@@ -125,6 +122,11 @@ main(int argc, char *argv[])
   int bmchecker[sb->size];
   int inodeChecker[sb->ninodes];
   int refChecker[sb->ninodes];
+  int isDirectory[sb->ninodes];
+
+  int j = 0;
+  uint currentAddress;
+  uint* indirectAddress;
 
   // Calculate where the valid addresses for data blocks starts and ends
   uint dataBlockStart = 3 + (sb->ninodes / IPB) + (sb->size / BPB) + 1;
@@ -133,6 +135,13 @@ main(int argc, char *argv[])
   // Populate the bitmap checker with values from bitmap for each block
   for (i = dataBlockStart; i < sb->size; i++) {
     bmchecker[i] = (int) bitmap[i/8] >> (i % 8) & 1;
+  }
+
+  // Populate inode checker and ref checker and isDirectory with zero values
+  for (i = 0; i < sb->ninodes; i++) {
+    inodeChecker[i] = 0;
+    refChecker[i] = 0;
+    isDirectory[i] = 0;
   }
 
   printf("Beginning test 1\n");
@@ -161,11 +170,11 @@ main(int argc, char *argv[])
     }
 
     // Note that the inode is in use
-    inodeChecker[i] += 2;
+    else if (inodeChecker[i] % 2 == 0) {
+      inodeChecker[i] += 1;
+    }
 
     // Iterate through the inode addresses -> this is for DIRECTS ONLY
-    int j = 0;
-    uint currentAddress;
     for (j = 0; j < NDIRECT + 1; j++) {
       // Test 2: Check if each address in the addrs[] is valid. 
       // If not, throw an error message
@@ -229,11 +238,61 @@ main(int argc, char *argv[])
 
     // Iterate through the inode addresses -> this is for INDIRECT BLOCK
     currentAddress = inodeBlock[iIndex].addrs[NDIRECT];
-    
+    indirectAddress = (uint*) (addr + currentAddress * BLOCK_SIZE);
+    for (j = 0; j < NINDIRECT; j++, indirectAddress++) {
+      // To be continued...
+      
+      // If the address is not null (unallocated)
+      if (*indirectAddress != 0) {
+        // TEST 2: If the address is out of the data block range
+        if (*indirectAddress < dataBlockStart || *indirectAddress > dataBlockEnd) {
+          fprintf(stderr, "ERROR: bad indirect address in inode.\n");
+          close(fsfd);
+          exit(1);
+        }
+
+        // Check the validity of the bitmap using our bitmap checker
+        // Used for tests 5-8
+        // In the bitmap array: 1 - block used but not accouted for
+        //                      2 - block used and accounted for
+        //                      0 - block not used
+
+        // Case 1: Inode has the address but bitmap says it is free
+        if (bmchecker[*indirectAddress] == 0) {
+          fprintf(stderr, "ERROR: address used by inode but marked free in bitmap.\n");
+          close(fsfd);
+          exit(1);
+        }
+        // Case 2: Inode has an address that has already been accounted for by
+        // a previous inode
+        else if (bmchecker[*indirectAddress] == 2) {
+          // An indirect block is throwing the duplicate error
+          if (j == NDIRECT) {
+            fprintf(stderr, "ERROR: indirect address used more than once.\n");
+            close(fsfd);
+            exit(1);
+          }
+          // A direct block is throwing the duplicate error
+          else {
+            fprintf(stderr, "ERROR: direct address used more than once.\n");
+            close(fsfd);
+            exit(1);
+          }
+        }
+        // Case 3: Inode has an address that has not been accounted for before
+        // and we will mark that address in bmchecker as accounted for
+        else if (bmchecker[*indirectAddress] == 1) {
+          bmchecker[*indirectAddress] = 2;
+        }
+      }
+    }
 
 
     // TEST 4: Checking if a directory is properly formatted
     if (inodeBlock[iIndex].type == 1) {
+
+      // Let's mark that this is a directory
+      isDirectory[i] = 1;
 
       // get the address of current directory
       de = (struct dirent *) (addr + (inodeBlock[iIndex].addrs[0])*BLOCK_SIZE);
@@ -245,6 +304,7 @@ main(int argc, char *argv[])
 
       // Iterate through all directories to check for parent directory and current (.. and .)
       int k;
+      printf("This is directory for inode %d\n", i);
       for (k = 0; k < n; k++, de++) {
         if (de->inum != 0 || dip[de->inum].size != 0) {
           printf(" inum %d, name %s ", de->inum, de->name);
@@ -271,7 +331,14 @@ main(int argc, char *argv[])
         }
 
         // Record in the inode checker that the inum was referenced
-        inodeChecker[de->inum] += 1;
+        if (inodeChecker[de->inum] < 2) {
+          inodeChecker[de->inum] += 2;
+        }
+
+        // Record in the ref checker that the inum was referenced, but not if it's a .. on a directory
+        if (strcmp(de->name, "..") && strcmp(de->name, ".")) {
+          refChecker[de->inum]--;
+        }
       }
       // TEST 4: Check the flags - if current or parent is false, then it does
       // not exist and we error out.
@@ -282,22 +349,26 @@ main(int argc, char *argv[])
       }
     }
 
-    // Doing special things in the case of a regular file
-    if (inodeBlock[iIndex].type == 2) {
-      // Add the number of references to the ref checker
-      // The purpose is that when a directory references the file,
-      // we will decrement the ref checker every time and should
-      // end up with 0 for each address in a consistent file system
-      refChecker[i] += inodeBlock[iIndex].nlink;
+    // Add the number of references to the ref checker
+    // The purpose is that when a directory references the file,
+    // we will decrement the ref checker every time and should
+    // end up with 0 for each address in a consistent file system
+    refChecker[i] += inodeBlock[iIndex].nlink;
+    // In the case of a directory, we're going to set refChecker to 1
+    if (inodeBlock[iIndex].type == 1) {
+      refChecker[i] = 0;
     }
+    // In the case of a root directory, there are no inodes referencing this
+    // inode, so subtract 1
+    // if (i == 1) {
+    //   refChecker[i]--;
+    // }
   }
 
   // TEST 6: If bitmap checker still has used blocks not accounted for
   // in any inodes addrs[] field, then flag an error
   for (i = dataBlockStart; i < dataBlockStart + sb->nblocks + 1; i++) {
-    printf("Block %d has the value %d in bmchecker.\n", i, bmchecker[i]);
     if (bmchecker[i] == 1) {
-      printf("Offending block: %d\n", i);
       fprintf(stderr, "ERROR: bitmap marks block in use but it is not in use.\n");
       close(fsfd);
       exit(1);
@@ -307,28 +378,37 @@ main(int argc, char *argv[])
   // TEST 9-10: Let's see if the inode checker's final state is as desired
   // Possible states for each inode:
   //    0 - not in use and not referenced in directory
-  //    1 - not in use but referenced in directory (INCONSISTENT!)
-  //    2 - in use but not referenced in directory (INCONSISTENT!)
-  //    3 - in use and referenced in directory
-  for (i = 0; i < sb->ninodes; i++) {
-    if (inodeChecker[i] == 2) {
+  //    1 - in use but not referenced in directory (INCONSISTENT!)
+  //    2 - not in use but referenced in directory (INCONSISTENT!)
+  //    3 - in use and referenced in directory 
+  for (i = 1; i < sb->ninodes; i++) {
+    if (inodeChecker[i] == 1) {
       fprintf(stderr, "ERROR: inode marked use but not found in a directory.\n");
       close(fsfd);
       exit(1);
     }
-    else if (inodeChecker[i] == 1) {
+    else if (inodeChecker[i] == 2) {
       fprintf(stderr, "ERROR: inode referred to in directory but marked free.\n");
       close(fsfd);
       exit(1);
     }
   }
 
-  // TEST 11: Make sure that the number of links (refs) to a regular file
+  // TEST 11-12: Make sure that the number of links (refs) to a regular file
   // that is recorded in inode is equal to actuality in the directory entries
-  for (i = 0; i < sb->ninodes; i++) {
-    // If the value in refChecker is anything other than 0, then we have reference error
-    if (refChecker[i] != 0) {
+  for (i = 1; i < sb->ninodes; i++) {
+    // If the value in refChecker is anything other than 0
+    // given it's a regular file, then we have reference error (Test 11)
+    // printf("Refchecker for inode %d is %d, directory is %d\n", i, refChecker[i], isDirectory[i]);
+    if (refChecker[i] != 0 && isDirectory[i] == 0) {
       fprintf(stderr, "ERROR: bad reference count for file.\n");
+      close(fsfd);
+      exit(1);
+    }
+    // If the inode is directory and the refChecker is not -1
+    // Then throw an error (TEST 12)
+    else if (isDirectory[i] == 1 && refChecker[i] != 0) {
+      fprintf(stderr, "ERROR: directory appears more than once in file system.\n");
       close(fsfd);
       exit(1);
     }

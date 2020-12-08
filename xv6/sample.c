@@ -152,6 +152,8 @@ main(int argc, char *argv[])
     // Find exact location of the inode number
     inodeBlock = (struct dinode *) (addr + IBLOCK((uint)i) * BLOCK_SIZE);
     iIndex = i % IPB;
+
+    printf("inode %d size %d links %d type %d \n", i, inodeBlock[iIndex].size, inodeBlock[iIndex].nlink, inodeBlock[iIndex].type);
     
     // If inode is unallocated, make sure size is 0 and type is 0 and links is 0
     if (inodeBlock[iIndex].type == 0 && inodeBlock[iIndex].nlink == 0) {
@@ -170,7 +172,7 @@ main(int argc, char *argv[])
     }
 
     // Note that the inode is in use
-    else if (inodeChecker[i] % 2 == 0) {
+    else if (inodeChecker[i] % 2 == 0 && inodeBlock[iIndex].type != 0) {
       inodeChecker[i] += 1;
     }
 
@@ -287,7 +289,6 @@ main(int argc, char *argv[])
       }
     }
 
-
     // TEST 4: Checking if a directory is properly formatted
     if (inodeBlock[iIndex].type == 1) {
 
@@ -295,51 +296,107 @@ main(int argc, char *argv[])
       isDirectory[i] = 1;
 
       // get the address of current directory
-      de = (struct dirent *) (addr + (inodeBlock[iIndex].addrs[0])*BLOCK_SIZE);
-      n = inodeBlock[iIndex].size / sizeof(struct dirent);
+      // n = inodeBlock[iIndex].size / sizeof(struct dirent);
+      n = BLOCK_SIZE / sizeof(struct dirent);
 
       // Flags used to determine if the parent and current are found
       parentFound = false;
       currentFound = false;
-
-      // Iterate through all directories to check for parent directory and current (.. and .)
       int k;
-      printf("This is directory for inode %d\n", i);
-      for (k = 0; k < n; k++, de++) {
-        if (de->inum != 0 || dip[de->inum].size != 0) {
-          printf(" inum %d, name %s ", de->inum, de->name);
-  	      printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
-        }
 
-        // Check if we have crossed paths with the parent entry
-        if (strcmp(de->name, "..") == 0) {
-          parentFound = true;
-        }
+      for (j = 0; j < NDIRECT; j++) {
+        de = (struct dirent *) (addr + (inodeBlock[iIndex].addrs[j])*BLOCK_SIZE);
 
-        // Check if the current directory entry is in order
-        if (strcmp(de->name, ".") == 0) {
-          // TEST 4: If the current directory does not point to the current inode
-          // then we error out
-          if (de->inum != i) {
-            fprintf(stderr, "ERROR: directory not properly formatted.\n");
-            close(fsfd);
-            exit(1);
+        // Iterate through all directories to check for parent directory and current (.. and .)
+        for (k = 0; k < n; k++, de++) {
+          if (de->inum != 0 || dip[de->inum].size != 0) {
+            printf(" inum %d, name %s ", de->inum, de->name);
+            printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
           }
-          else {
-            currentFound = true;
+
+          // Check if we have crossed paths with the parent entry
+          if (strcmp(de->name, "..") == 0) {
+            parentFound = true;
           }
-        }
 
-        // Record in the inode checker that the inum was referenced
-        if (inodeChecker[de->inum] < 2) {
-          inodeChecker[de->inum] += 2;
-        }
+          // Check if the current directory entry is in order
+          if (strcmp(de->name, ".") == 0) {
+            // TEST 4: If the current directory does not point to the current inode
+            // then we error out
+            if (de->inum != i) {
+              fprintf(stderr, "ERROR: directory not properly formatted.\n");
+              close(fsfd);
+              exit(1);
+            }
+            else {
+              currentFound = true;
+            }
+          }
 
-        // Record in the ref checker that the inum was referenced, but not if it's a .. on a directory
-        if (strcmp(de->name, "..") && strcmp(de->name, ".")) {
-          refChecker[de->inum]--;
+          // Record in the inode checker that the inum was referenced
+          if (inodeChecker[de->inum] < 2) {
+            inodeChecker[de->inum] += 2;
+          }
+
+          // Record in the ref checker that the inum was referenced, but not if it's a .. on a directory
+          if (strcmp(de->name, "..") && strcmp(de->name, ".")) {
+            refChecker[de->inum]--;
+          }
         }
       }
+
+      // Indirect block
+      currentAddress = inodeBlock[iIndex].addrs[NDIRECT];
+      indirectAddress = (uint*) (addr + currentAddress * BLOCK_SIZE);
+
+      for (j = 0; j < NINDIRECT; j++, indirectAddress++) {
+      // To be continued...
+      
+      // If the address is not null (unallocated)
+      if (*indirectAddress != 0) {
+
+        de = (struct dirent *) (addr + (*indirectAddress) * BLOCK_SIZE);
+
+        // Iterate through all directories to check for parent directory and current (.. and .)
+        for (k = 0; k < n; k++, de++) {
+          if (de->inum != 0 || dip[de->inum].size != 0) {
+            printf(" inum %d, name %s ", de->inum, de->name);
+            printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
+          }
+
+          // Check if we have crossed paths with the parent entry
+          if (strcmp(de->name, "..") == 0) {
+            parentFound = true;
+          }
+
+          // Check if the current directory entry is in order
+          if (strcmp(de->name, ".") == 0) {
+            // TEST 4: If the current directory does not point to the current inode
+            // then we error out
+            if (de->inum != i) {
+              fprintf(stderr, "ERROR: directory not properly formatted.\n");
+              close(fsfd);
+              exit(1);
+            }
+            else {
+              currentFound = true;
+            }
+          }
+
+          // Record in the inode checker that the inum was referenced
+          if (inodeChecker[de->inum] < 2) {
+            inodeChecker[de->inum] += 2;
+          }
+
+          // Record in the ref checker that the inum was referenced, but not if it's a .. on a directory
+          if (strcmp(de->name, "..") && strcmp(de->name, ".")) {
+            refChecker[de->inum]--;
+          }
+        }
+        
+      }
+    }
+
       // TEST 4: Check the flags - if current or parent is false, then it does
       // not exist and we error out.
       if (parentFound == false || currentFound == false) {

@@ -55,12 +55,9 @@ main(int argc, char *argv[])
   }
   /* read the super block */
   sb = (struct superblock *) (addr + 1 * BLOCK_SIZE);
-  printf("fs size %d, no. of blocks %d, no. of inodes %d \n", sb->size, sb->nblocks, sb->ninodes);
 
   /* read the inodes */
   dip = (struct dinode *) (addr + (IBLOCK((uint)0))*BLOCK_SIZE); 
-  printf("begin addr %p, begin inode %p , offset %d \n", addr, dip, (char *)dip -addr);
-  printf("Root inode  size %d links %d type %d \n", dip[ROOTINO].size, dip[ROOTINO].nlink, dip[ROOTINO].type);
   
   /* read the bitmap */
   // bitmap = (uchar *) (addr + BBLOCK(0, sb->ninodes) * BLOCK_SIZE);
@@ -144,16 +141,12 @@ main(int argc, char *argv[])
     isDirectory[i] = 0;
   }
 
-  printf("Beginning test 1\n");
-
   // Iterate through inode numbers
   for (i = 0; i < sb->ninodes; i++) {
     
     // Find exact location of the inode number
     inodeBlock = (struct dinode *) (addr + IBLOCK((uint)i) * BLOCK_SIZE);
     iIndex = i % IPB;
-
-    printf("inode %d size %d links %d type %d \n", i, inodeBlock[iIndex].size, inodeBlock[iIndex].nlink, inodeBlock[iIndex].type);
     
     // If inode is unallocated, make sure size is 0 and type is 0 and links is 0
     if (inodeBlock[iIndex].type == 0 && inodeBlock[iIndex].nlink == 0) {
@@ -309,10 +302,6 @@ main(int argc, char *argv[])
 
         // Iterate through all directories to check for parent directory and current (.. and .)
         for (k = 0; k < n; k++, de++) {
-          if (de->inum != 0 || dip[de->inum].size != 0) {
-            printf(" inum %d, name %s ", de->inum, de->name);
-            printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
-          }
 
           // Check if we have crossed paths with the parent entry
           if (strcmp(de->name, "..") == 0) {
@@ -359,11 +348,7 @@ main(int argc, char *argv[])
 
         // Iterate through all directories to check for parent directory and current (.. and .)
         for (k = 0; k < n; k++, de++) {
-          if (de->inum != 0 || dip[de->inum].size != 0) {
-            printf(" inum %d, name %s ", de->inum, de->name);
-            printf("inode  size %d links %d type %d \n", dip[de->inum].size, dip[de->inum].nlink, dip[de->inum].type);
-          }
-
+          
           // Check if we have crossed paths with the parent entry
           if (strcmp(de->name, "..") == 0) {
             parentFound = true;
